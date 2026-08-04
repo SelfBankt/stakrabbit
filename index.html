@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>stakrabbit — quick jobs, local gig economy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF4;      /* milk */
+    --paper-2:#F1EFE6;
+    --ink:#16211B;        /* ink with green undertone */
+    --ink-soft:#49564E;
+    --moss:#0B786D;        /* wallaby green — interactive */
+    --moss-dark:#04534D;   /* wallaby green — brand surface */
+    --gold:#F89631;        /* wallaby orange — lightning & prices */
+    --gold-soft:#FBC58E;
+    --mist:#E1EAEA;        /* pale green tint */
+    --brick:#3A473F;
+    --line: rgba(22,33,27,0.12);
+    --card-shadow: 0 1px 2px rgba(22,33,27,0.05), 0 12px 28px -18px rgba(4,83,77,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Instrument Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  ::selection{ background:var(--gold-soft); color:var(--ink); }
+
+  .mono{ font-family:'Spline Sans Mono', monospace; }
+  .display{ font-family:'Bricolage Grotesque', sans-serif; }
+
+  a{ color:inherit; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  /* ---------- HERO / NOTICEBOARD ---------- */
+  .board{
+    background: var(--moss-dark);
+    background-image: radial-gradient(1100px 420px at 85% -10%, rgba(46,158,91,0.35), transparent 65%);
+    padding: 26px 24px 64px;
+  }
+  .board-inner{ max-width:1080px; margin:0 auto; }
+  .top-row{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    margin-bottom:24px;
+  }
+  .wordmark{
+    display:flex; align-items:center;
+  }
+  .wordmark img{
+    height:64px;
+    width:auto;
+    display:block;
+  }
+  .relay-status{
+    display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,0.12);
+    border:1px solid rgba(255,255,255,0.35);
+    padding:7px 12px 7px 10px;
+    border-radius:100px;
+    color:var(--paper);
+    font-size:12.5px;
+  }
+  .dot{ width:8px;height:8px;border-radius:50%; background:#e0b23c; transition:background .3s; }
+  .dot.live{ background:#7CC576; box-shadow:0 0 0 3px rgba(124,197,118,0.25); }
+  .dot.off{ background:#C96A5A; }
+
+  .flyer{
+    position:relative;
+    max-width:720px;
+    background:transparent;
+    padding:34px 0 0;
+    color:var(--paper);
+  }
+  .flyer h1{
+    font-family:'Bricolage Grotesque', sans-serif;
+    font-weight:800;
+    font-size:clamp(38px,6vw,64px);
+    line-height:1.02;
+    letter-spacing:-0.015em;
+    margin:2px 0 16px;
+  }
+  .flyer h1 em{
+    font-style:normal;
+    color:var(--gold);
+  }
+  .flyer p.lede{
+    font-size:clamp(15px,1.6vw,17.5px);
+    line-height:1.6;
+    color:rgba(251,250,244,0.82);
+    max-width:52ch;
+    margin:0 0 10px;
+  }
+  .flyer p.lede:last-of-type{ margin-bottom:22px; }
+  .hero-tags{ display:flex; gap:8px; flex-wrap:wrap; }
+  .hero-tag{
+    font-family:'Spline Sans Mono', monospace;
+    font-size:11.5px;
+    padding:6px 11px;
+    border:1px solid rgba(251,250,244,0.35);
+    border-radius:100px;
+    color:rgba(251,250,244,0.92);
+    background:rgba(251,250,244,0.08);
+  }
+
+  .post-cta{
+    margin-top:22px; display:flex; gap:12px; flex-wrap:wrap;
+  }
+  .btn{
+    border:none; border-radius:100px; padding:13px 22px;
+    font-weight:600; font-size:15px;
+    font-family:'Instrument Sans', sans-serif;
+    display:inline-flex; align-items:center; gap:8px;
+    cursor:pointer;
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{
+    background:var(--gold); color:var(--ink);
+    box-shadow:0 10px 22px -10px rgba(255,216,74,0.6);
+  }
+  .btn-primary:hover{ background:#F2C71E; }
+  .btn-ghost{
+    background:transparent; color:var(--paper);
+    border:1px solid rgba(255,255,255,0.5);
+  }
+  .btn-ghost:hover{ background:rgba(255,255,255,0.12); }
+
+  /* ---------- LOCATION BAR ---------- */
+  .locate-bar{
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    padding:18px 24px 8px;
+  }
+  .locate-inner{
+    max-width:1080px; margin:0 auto;
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .locate-search{
+    flex:1; min-width:200px;
+    display:flex; align-items:center; gap:8px;
+    background:#fff; border:1px solid var(--line); border-radius:100px;
+    padding:10px 16px;
+  }
+  .locate-search input{
+    border:none; outline:none; font-family:inherit; font-size:13.5px;
+    flex:1; background:transparent; color:var(--ink);
+  }
+  .locate-btn{
+    display:flex; align-items:center; gap:6px;
+    background:#fff; border:1px solid var(--line); border-radius:100px;
+    padding:9px 13px; font-size:13px; font-weight:600; color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .locate-btn:hover{ border-color:var(--moss); color:var(--moss); }
+  .locate-btn.active{ background:var(--moss); color:var(--paper); border-color:var(--moss); }
+  .sort-toggle{
+    display:flex; border:1px solid var(--line); border-radius:100px; overflow:hidden;
+    flex:none;
+  }
+  .sort-toggle button{
+    border:none; background:#fff; padding:9px 13px; font-size:13px; font-weight:600;
+    color:var(--ink-soft);
+  }
+  .sort-toggle button.active{ background:var(--moss); color:var(--paper); }
+  .locate-status{
+    width:100%; font-size:11.5px; color:var(--ink-soft); margin-top:8px; min-height:14px;
+  }
+  .currency-chip{
+    font-family:'Spline Sans Mono', monospace; font-size:11.5px;
+    padding:8px 12px; border-radius:100px; border:1px solid var(--line);
+    background:#fff; color:var(--ink-soft); white-space:nowrap;
+  }
+
+  #map-view{
+    display:none;
+    height:560px;
+    border:1px solid rgba(17,17,17,0.12);
+    box-shadow:var(--card-shadow);
+    overflow:hidden;
+  }
+  .leaflet-popup-content{ font-family:'Instrument Sans',sans-serif; min-width:190px; }
+  .popup-cat{
+    font-family:'Spline Sans Mono', monospace; font-size:10px; text-transform:uppercase;
+    color:var(--moss); margin-bottom:4px; display:block;
+  }
+  .popup-title{ font-family:'Bricolage Grotesque',sans-serif; font-weight:600; font-size:15px; margin:0 0 4px; }
+  .popup-price{ font-family:'Spline Sans Mono', monospace; font-size:13px; margin-bottom:8px; }
+  .popup-btn{
+    width:100%;
+    background:var(--gold); color:var(--ink); border:none; border-radius:10px;
+    padding:6px 8px; font-size:11.5px; font-weight:600;
+  }
+
+  /* ---------- FILTER BAR ---------- */
+  .filters{
+    position:sticky; top:0; z-index:20;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    padding:14px 24px;
+  }
+  .filters-inner{
+    max-width:1080px; margin:0 auto;
+    display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;
+  }
+  .chip{
+    flex:none;
+    display:flex; align-items:center; gap:7px;
+    padding:9px 14px;
+    border-radius:100px;
+    border:1px solid var(--line);
+    background:#fff;
+    font-size:13.5px; font-weight:500;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .chip.active{
+    background:var(--moss); color:var(--paper); border-color:var(--moss);
+  }
+  .chip .count{
+    font-family:'Spline Sans Mono', monospace; font-size:11px;
+    opacity:0.7;
+  }
+
+  /* ---------- BOARD GRID ---------- */
+  main{ max-width:1080px; margin:0 auto; padding:34px 24px 80px; }
+  .section-label{
+    font-family:'Spline Sans Mono', monospace;
+    font-size:12px; text-transform:uppercase; letter-spacing:0.1em;
+    color:var(--moss-dark); margin-bottom:16px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(258px,1fr));
+    gap:26px 22px;
+  }
+  .card{
+    position:relative;
+    background:#FFFFFF;
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px 18px 18px;
+    box-shadow:var(--card-shadow);
+    transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .card:hover{
+    transform:translateY(-3px);
+    border-color:var(--moss);
+    box-shadow:0 2px 4px rgba(22,33,27,0.05), 0 18px 34px -18px rgba(4,83,77,0.45);
+  }
+
+  .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .cat-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10.5px;
+    padding:4px 8px; border-radius:4px;
+    background:var(--mist); color:var(--moss-dark);
+    text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .demo-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10px;
+    padding:3px 7px; border-radius:4px;
+    background:rgba(17,17,17,0.08); color:var(--brick);
+  }
+  .dist-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10.5px;
+    padding:4px 8px; border-radius:4px;
+    background:var(--gold-soft); color:#7A4200;
+    white-space:nowrap;
+  }
+  .trust-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10.5px;
+    padding:4px 8px; border-radius:4px;
+    background:var(--mist); color:var(--moss-dark);
+    white-space:nowrap;
+  }
+  .method-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10px;
+    padding:3px 7px; border-radius:4px;
+    background:rgba(17,17,17,0.06); color:var(--ink-soft);
+    display:inline-flex; align-items:center; gap:3px;
+  }
+  .method-row{ display:flex; gap:5px; flex-wrap:wrap; margin-bottom:10px; }
+
+  .pay-tabs{
+    display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap;
+  }
+  .pay-tab{
+    flex:1; min-width:90px;
+    border:1px solid var(--line); background:#fff; border-radius:10px;
+    padding:9px 10px; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+  }
+  .pay-tab.active{ background:var(--moss); color:var(--paper); border-color:var(--moss); }
+  .pay-panel{ display:none; }
+  .pay-panel.active{ display:block; }
+  .plain-note{
+    font-size:13px; line-height:1.6; color:var(--ink-soft);
+    background:rgba(17,17,17,0.04); border-radius:8px; padding:14px 15px;
+  }
+  .plain-note strong{ color:var(--ink); }
+  .card h3{
+    font-family:'Bricolage Grotesque', sans-serif; font-weight:600; font-size:19px;
+    margin:0 0 6px; line-height:1.2;
+  }
+  .card .loc{
+    font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;
+    display:flex; align-items:center; gap:5px;
+  }
+  .card p.desc{
+    font-size:13.5px; line-height:1.5; color:var(--ink-soft);
+    margin:0 0 16px;
+    min-height:38px;
+  }
+  .card-foot{
+    display:flex; align-items:center; justify-content:space-between;
+    border-top:1px dashed var(--line); padding-top:12px;
+  }
+  .price{
+    font-family:'Spline Sans Mono', monospace; font-weight:700; font-size:15px;
+    color:var(--ink);
+    display:flex; align-items:center; gap:4px;
+  }
+  .price .bolt{ color:var(--gold); }
+  .pay-btn{
+    background:var(--gold); color:var(--ink);
+    border:none; border-radius:10px; padding:9px 16px;
+    font-weight:700; font-size:12.5px;
+    font-family:'Instrument Sans', sans-serif;
+    display:flex; align-items:center; justify-content:center; gap:5px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .pay-btn:hover{ background:var(--gold-soft); }
+
+  .empty{
+    grid-column:1/-1;
+    text-align:center; padding:50px 20px;
+    color:var(--ink-soft); font-size:14px;
+  }
+
+  /* ---------- DRAWERS ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(17,17,17,0.45);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+    z-index:40;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+
+  .drawer{
+    position:fixed; top:0; right:0; height:100%; width:min(420px,92vw);
+    background:var(--paper); z-index:50;
+    transform:translateX(100%); transition:transform .28s ease;
+    box-shadow:-12px 0 30px rgba(0,0,0,0.25);
+    display:flex; flex-direction:column;
+  }
+  .drawer.show{ transform:translateX(0); }
+  .drawer-head{
+    padding:22px 22px 16px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .drawer-head h2{ font-family:'Bricolage Grotesque',sans-serif; font-size:22px; margin:0; font-weight:600;}
+  .close-x{
+    background:none; border:none; font-size:20px; color:var(--ink-soft);
+    width:32px;height:32px; border-radius:50%;
+  }
+  .close-x:hover{ background:rgba(17,17,17,0.06); }
+  .drawer-body{ padding:20px 22px; overflow-y:auto; flex:1; }
+
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--ink-soft);
+  }
+  .field input, .field select, .field textarea{
+    width:100%; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--line); background:#fff;
+    font-family:inherit; font-size:14px; color:var(--ink);
+  }
+  .field textarea{ resize:vertical; min-height:70px; }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; }
+
+  .media-thumb{
+    position:relative; display:inline-block; width:90px; margin:0 8px 8px 0; vertical-align:top;
+  }
+  .media-thumb img, .media-thumb video{
+    width:90px; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block;
+  }
+  .media-thumb .media-file-note{
+    font-size:10.5px; padding:8px; border-radius:8px; background:rgba(17,17,17,0.04);
+    color:var(--ink-soft); word-break:break-word; height:80px; box-sizing:border-box;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+  }
+  .media-remove-btn{
+    position:absolute; top:3px; right:3px; background:rgba(17,17,17,0.65); color:#fff;
+    border:none; border-radius:50%; width:20px; height:20px; font-size:11px; line-height:1;
+    cursor:pointer;
+  }
+
+  .notice{
+    font-size:12.5px; line-height:1.5; padding:12px 13px;
+    border-radius:10px; margin-bottom:18px;
+    background:var(--gold-soft); color:#7A4200;
+    border:1px solid rgba(255,216,74,0.6);
+  }
+  .notice.good{
+    background:var(--mist); color:var(--moss-dark);
+    border-color:rgba(46,158,91,0.35);
+  }
+  .notice a{ text-decoration:underline; }
+
+  .submit-row{ margin-top:6px; }
+
+  /* Payment drawer specifics */
+  .pay-target{
+    text-align:center; padding:10px 0 4px;
+  }
+  .pay-amount{
+    font-family:'Spline Sans Mono', monospace; font-weight:700; font-size:30px; margin-bottom:4px;
+  }
+  .addr-row{
+    display:flex; gap:8px; align-items:center;
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:'Spline Sans Mono', monospace; font-size:13px;
+  }
+  .addr-row button{
+    background:var(--moss); color:var(--paper); border:none; border-radius:8px;
+    padding:6px 10px; font-size:11.5px; font-weight:600;
+  }
+
+  footer{
+    background:var(--moss-dark);
+    color:var(--paper);
+    padding:34px 24px 46px;
+    text-align:center;
+    margin-top:30px;
+  }
+  footer .proto-tags{
+    display:flex; justify-content:center; gap:10px; margin-bottom:10px;
+  }
+  footer .proto-tags span{
+    font-family:'Spline Sans Mono', monospace; font-size:11px;
+    padding:5px 11px; border:1px solid rgba(251,250,244,0.3); border-radius:100px;
+    color:rgba(251,250,244,0.85);
+  }
+  footer p{ font-size:12px; color:rgba(251,250,244,0.65); margin:0; }
+
+  /* ---------- CATEGORY TICKER (signature) ---------- */
+  .ticker{
+    background:var(--gold);
+    color:var(--ink);
+    overflow:hidden;
+    white-space:nowrap;
+    border-top:1px solid rgba(22,33,27,0.15);
+    border-bottom:1px solid rgba(22,33,27,0.15);
+  }
+  .ticker-track{
+    display:inline-flex;
+    padding:11px 0;
+    animation:tick 34s linear infinite;
+  }
+  .ticker span{
+    font-family:'Spline Sans Mono', monospace;
+    font-size:12.5px; font-weight:500;
+    letter-spacing:0.04em;
+    padding:0 22px;
+    display:inline-flex; align-items:center; gap:8px;
+  }
+  @keyframes tick{
+    from{ transform:translateX(0); }
+    to{ transform:translateX(-50%); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+    .ticker-track{ animation:none; }
+  }
+
+  @media (max-width:640px){
+    .board{ padding:22px 16px 36px; }
+    .top-row{ padding:0 20px; }
+    .flyer{ padding:24px 20px 26px; transform:rotate(0deg); }
+    main{ padding:26px 16px 60px; }
+    #account-area{ width:100%; justify-content:flex-start; }
+    .account-chip{ font-size:11.5px; padding:6px 11px; }
+  }
+
+  :focus-visible{ outline:2px solid var(--moss); outline-offset:2px; }
+
+  /* ---------- ACCOUNT / AUTH ---------- */
+  #account-area{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .inbox-item{
+    border:1px solid var(--line); border-radius:12px; padding:14px 15px; margin-bottom:12px;
+  }
+  .inbox-item.unread{ border-left:3px solid var(--gold); }
+  .unread-dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--gold); margin-left:6px;
+  }
+  .inbox-item .inbox-meta{
+    display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--ink-soft);
+    font-family:'Spline Sans Mono', monospace; margin-bottom:8px;
+  }
+  .inbox-item .inbox-body{ font-size:13.5px; line-height:1.5; white-space:pre-wrap; }
+  .account-chip{
+    display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,0.12);
+    border:1px solid rgba(255,255,255,0.35);
+    padding:7px 14px;
+    border-radius:100px;
+    color:var(--paper);
+    font-size:12.5px;
+    font-family:'Spline Sans Mono', monospace;
+    cursor:pointer;
+  }
+  .account-chip:hover{ background:rgba(255,255,255,0.2); }
+  .account-chip .logout-x{
+    background:none; border:none; color:rgba(251,250,244,0.7);
+    font-family:inherit; font-size:12px; margin-left:2px; cursor:pointer;
+  }
+  .account-chip .logout-x:hover{ color:var(--paper); }
+
+  .auth-tabs{ display:flex; gap:6px; margin-bottom:18px; }
+  .auth-tab{
+    flex:1; border:1px solid var(--line); background:#fff; border-radius:10px;
+    padding:9px 10px; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+  }
+  .auth-tab.active{ background:var(--moss); color:var(--paper); border-color:var(--moss); }
+  .auth-panel{ display:none; }
+  .auth-panel.active{ display:block; }
+
+  .key-warning{
+    font-size:12.5px; line-height:1.6; padding:12px 13px;
+    border-radius:10px; margin-bottom:16px;
+    background:var(--gold-soft); color:#7A4200;
+    border:1px solid rgba(255,216,74,0.6);
+  }
+  .key-warning strong{ display:block; margin-bottom:4px; }
+  .checkbox-row{
+    display:flex; align-items:flex-start; gap:8px; margin-bottom:16px; font-size:13px; color:var(--ink-soft);
+  }
+  .checkbox-row input{ margin-top:3px; }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="board-inner">
+    <div class="top-row">
+      <div class="wordmark">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAn4AAAEaCAYAAACPXVqxAAA6cUlEQVR42u3dd5gUVfr28e/ADBlJoiAgZjCLoqioKGYxi5jXFXPOYtp1d83KGlZFV10jJky7gpEfCCoioGJWDCgmFATJDDAw7x/P6Xd6xumZ7unqqlPV9+e65gKGme7qU9Vdd5065zkl5cN6ISIiEnPHApcAmwMVwK3AtcB8NY1IlUZqAhERibmzgIdd6AMoBS4GBqhpRBT8REQkOc4G/pXhfHYR0E5NJKLgJyIi8bc6cBVQkuH/ewE91EwiCn4iIhJvnYFRQId6fu7PaioRBT8REYm3IUCfLH5uKzWVSJVSNYGIiHigufvzeKCj+/sYYCpQDlSm/exxwKlZPu5a2O3eaWpiEQU/ERGJzj7A2sCewE7ue53S/v8yrBzLe9gEjtewsi0PAo2zfI5uwGYKfiIKfiIiEr6uQG/gDKB/PQGuufsaAOwN3IGVbmmc43NWqNlFFPxERCQ83YHBwAlYL1xDzlfnqxlFFPxERMRfjYCdgceALmoOkejfkCIiIoWwOnAbME6hT8QP6vETEZFC6AM8q8AnouAnIiLJthXwArCGmkLEL7rVKyIiQbtIoU9EwU9ERJKtFKu3d4zOdSIKfiIikmy9gLM926bFwFztGhEFPxERCc7m2GQO33wIjNfuEVHwExGRYKwPjKRhhZkLbYl2j4iCn4iIBGc9bGUOH92s3SOi4CciIsHoAtzk6bbNBKZrF4ko+ImISDBOxOr2+egh4GvtIhEFPxERyd/+wF893r6HtItEFPxERCSY88elQGNPt+9N7FaviCj4iYhIngZg6/H66iZgoXaTSHVaq1dERHLVFFuWzcdzSCXwGvB/2k0if6QePxERydUewC6ebtvv2JJx5dpNIgp+IiKSn+bAxR5v3zBgjnaTiIKfiIjkb1egn6fbNgG4Q7tIRMFPRETy1wy4zNNtW4WVlpml3SSi4CciIvnbDdjZw+1aBpwLjNUuElHwExGR/JUBl3u6bWOAO7WLRBT8REQkGH2BHTzcrs+Ac7R7RLKjOn4iIpKNnfBvlY7PsWXjvtXuEcmOevxERKQ+awJneLZNFcBBCn0iCn4iIhKsU4HOnm3TNcA32jUiudGtXhERqUtH4CzPtumvwNXaNSK5U4+fiIhkUgKc6cKfL65S6BNR8BMRkeD51tv3N+Af2i0iCn4iIhK804EOnmzLP4C/a5eIKPiJiEjwmgDbeBT6rtIuEcmfJneIiEhtdgAOiHgbVqGePpFAqcdPRERqc5kH2/A1VrZFRAKiHj8REQGr09cYOA3YAtg74u35FivQvFK7RkTBT6QY36stQ37OSmCh+1OSqSmwOrbW7SlAC2xsX9S+xZZi+0K7SETBT6QY9QNGhPycc4GtXfiT5H32HwacC2wCtPFo22YABwKfaTeJKPiJFKsmQPuQn7MRVsBXkqMncDJwKLCOh9v3Izah5BPtKhEFP5FiFsXtVo2tSo5NsJp8R2K3dn30A7CfQp+Igp+IiDRMGXAHMAho5/m23qbQJ6LgJyIiuWsO7AOcB+wSg+19HLhdu01EwU9ERHLTCnjaBb84+AkYioYWiIRCBZxFRJKhDJsN+1yMQh/A34Cp2n0i4VCPn4hIMtwLHIcVYY6T5dp1IuFRj5+ISPwdjU3gaBzDba/Q7hMJj3r8RETiqx0wELgTP1bcaIi/AYOBG4BvsFU7gtAWK2OTyQbYaiXp3gOeqvG9lcAkHWqi4CciIlF7HlvVJc42dF+7A7+mhaw52KSPbGpYng10qfG9dYHNc9yWvtjydTW9CiwD7sLqDWbrcx2iouAnIiJBOAbYMWGvaU1sgkrKCZ5s197uzwNz/L1ngHnu7/OxkjUrgQXAIh3CouAnIiLZOAR4EJvJK/4aWOPfZ7o/PwdeAmYCDysEioKfiIhk0ha4WKEvlpq5P3u5L4CrgFeAycBnwDhglZpKFPxERATgOmAHNUNidMTK8ByHjSP8EbgH+BgbWygSKJVzERGJj/2w0i2STE2B9YGbsV7AMcBe2EQVEQU/EZEishlWaqSNmqJo9Md6/SYANwHrqElEwU9EpDhcgK3DK8WnMzauczIwHDgA6x0UUfATEUmgvthMXiluHbEyPi9gs4JvArqrWUTBT0QkOZpgJT/aqikkTX+sF/ATdBtYFPxERBLjODS4XzJr5QLgu9iydxuoSUTBT0QknpoBl+izWrLQARiCTQQZCvRQk4iCn4hIvByPrWMrkq01gAuBN7HyP6rXKwp+IiIx0B6byVuippAG6Ai8iBWD7qbmkBRdCQTXjh0ieN7fsAW/RSR5OqHePsnficBBwOHYcnCiwCIB2AB4L+TnrAS2Ar5W84sk0tmot0+CsTrwHLYiyK1AuZpEwU/y0whoEcHz6qQgkkztgV5qBglQO2yd522AYxX+ijuwSDxVqglEEqsr0EfNIAVwGLb6x/ZqCgU/ERHxwwo1gRQ4/L0OHKymUPATEZHodVETSIE1Ax7DJn6Igp+IiEToQjWBhKAF8DhwoJpCwU9ERKKzSk0gIYa/J1DPn4KfiIhEpkxNIAp/ouAnIlIcJqsJJGTNgacU/hT8REQkfI+oCSQCTVHPn4KfiIiErpmaQCLSHJvwcQzQSs2h4CciIoU3A3hHzSARaYEVeX5e4U/BT0RECm8+cAOwSE0hEdrDhb/V1BQKfiIiUlj/A+5RM4gH4e9ZoI2aQsFPREQK60ZgnJpBPAh/zyj8KfiJiEhh/QYcABwNTFJzSMThbwS67avgJyIiBbUIK7GxK9AXW17rLWCC+/pKTSQh2Qt4GuilpoivUjWBiEgslANvu7+PTPt+excI1wSGABuoqaTA4a+/C4DnArPVJPGiHj8RkXib64Lg/cAWwGnA12oWKaBS4CjgRXfBIQp+IiISgaXAv4HNgbvUHFJg2wKjgE5qCgU/ERGJTjlwNnA3UKnmkALqDfwX9fwp+ImISKQqgbOAKWoKKbA+WKHnNdQUCn4iIhKdVcB7agYJwQ7Ao2oGBT8REYnWrWoCCckuQD81g4KfiIhE5xw1gYSkGXAl0E5NoeAnIiLhKMVq++2M1Vo7S00iIdrDHXMlagp/PyBERCS+mgBdgEHu37ti462au/8TCdvZwB3APDWFgp+IiOSvzAW9HYCDXMjroGYRT3TE6kn+CVim5lDwq6k7sFmGq9ghQMu07/0O3IzNVKvpfWCmdmnsbARsmPbvtYEzMvzsA8CXaf+eAXyiJpQisi3QE7jc/Sniq0HYajKj1RTFHfy2dFemJ1O1nuT62G2KbO2c4fvfAd+7v39C1bTyT4GFBX5dKyLafytidry1A3q4v5/kAt/G7uowG7fU+Pc84CP39+HAx8C3wK96a0uCtHcXSOdhvXvN1CQSEyOwZQR/UFMUV/DrAewN7AYMwG5RFMI67gtsSnmq12iqC4VvAC8D84FfsmiX9ch+cOr6Ee2/jYCmeT7GbGytz0LqDVwMbELtvbsN1dbta9L+/NoFwH+6EPhzlo/VhvCXHVrutlFM07T3sC8aAYsiOnH1APYBTnHvHZG4aQv8BRvzp1u+nigpH9arUFeop7ukP8iz1/wD8BLwFNYzOLuWn+nmAkQxDIweAtxUoGPgNKyXN6pjYCZ2q2EYMIe6e0hPBu4Nefumkf3tun3chUuY5rgLoAUhhb4ngYM9e38sAg4DXgvp+dpjPeEXAofrFCUJcTjwLFo+0AtB9/itBpzq0n03T19zN7eNJ2FjBu/DljQaCVSkh2IdHg3S2rXvOR4cA53d1eaF2DiTE12Y8ebCS4cLYMM/Hvcw9C0EBgYQ+sqA1d3FReN6fnYwtuZpmQ4LSZDhWJmXi3IIf4vVbH4HvzYuSJ1PbuP1otTYfRhfhk0WeRO4DVtseqmuTBpkT2wCRlfPtqsFNjZqB7eP73GhP2o6xvwNfQtcL0W+oa8LNs6pJ9abJ1KMmroOgUNy+J1HgOnABGz4jj4vPQp+RwA3YrNz46oRtsxMP2A8dhtYxa2z1xcbeL6fC1m+WgO4zgXUq4HXtesiD32P4WdP36AAQl9/rKejs3a1yP//DM7WRe7PediQrHexHvFyNWN0wa8t8CCwL/lPMPBJP2BTHRpZHwMDgbuI13jI3dx+Ph94gtrHeUo4oe8Qz7YrFfpezfNxuriLDIU+kfzPM22xsa9bAFcA/1OzNFxDe7U2A15wV+pNE9Ymy92BpfEFdWuD3Ra/j3hOgmkE3A68gpWZ0VVkeJp5GvoWY7d3XwngsQ4A+mhXiwRqU2xoyIHu4kqLUIQQ/Eqw2bofkLmeXtxNcKG2uQ6PjNphk2H6JeC1bA28iM1elcJr6j64fQt9i4BDyb+nL/UaD9WuFimIFlhN1/Wof7KU5Bn8GmHFdu9IcGOvxG7PVOjQyHgMHOOCUpKC/w7AVdq9BdcMu7Xu4+3dIEu2lAE7RvA6lqJaaVIc1gfW1fFe+ODXA3g74Ql7IjAOVcbPZENssPoOCXxtKq1SWKnZu76FvgUEU7Il3XLCq/tXgY21/iewHTYxTaRYLiSlAbK9P746VgS3TcLbI9XbpxDwR+2Au9UMkkfoO9iz7Qpq9m5twe8oCleQegK24ss44P+wNavBShYdosNNioTKuxQ4+N0H7JrwtngTlffIpC3wXBEcA1KY0OdzyZZXC/T4y1z4eyKA1/66C5O3Y0sQTqP6ZKQ2WM2zvUnOZLv3qX22/S5o/LXkll+kAQ13BFb3LOmuRzM7a7Ma8LxCnzRAM2xogI+zdwcRzOzdupQDR7sL54OAVln8zlLgU2w98VuwOxBv1vP+/G/M358/AL9iY6xvwoqrv+PaoqatsLsPKY2wdcA7pB1zm+mtl3i/oJIuBQt+qwFDgZYJb4fx2G0Tqa4j8Iy7yhbJRVOsp8+32a2LsYkcr4b0fEuBY4He2OS4S6h9bNJY7LbtDy70JPH9+XXa3z91xwfY2Oofs3yMD2r53pi0vzfBSn2khuv0BP7k/l5GvBcakCp3Yb3fUoDgdxj+Lb9VCDdnuLosducp9EkDQ9/jHoa+oNbebYh33dfwDP9fGfP35wKqz7B8G1sfO2W+OyYq83i92VjuwnC6a9yfLV0Ib4zVgxuYFqAlXiaqCQoX/PYogjZ4w11pS3UHAOeqGSRHqeLMvoW+oNbezVcQgafEhZYo3p+pC+TRwEdp338EmJn278X4M/g+tR2LsHW6Uy5xf+7vgmAjbM351u7cWKa3s5duwO7SSQGC3/YkvwhpBXYrW7WAqmvtPhRbqikkB74vw/ZaQtp5baznMKwVcz4CJgFfUdVjOQsbkxdni9yfT6Z97zZ3XuwKnIwVCz4SFQr2xUyswohq7RYo+O1D8uvkTMKKEUt11wE7qRkkx9Dn40SOhdgEtVcT1NYXhxD6JmGziKdiA+nnFclxPDstYExxf/+HC34XApuQzDqmcfEgNg5WChD8yoC1It62ifVcUa5FfstsrcC6jFfpMKhmb2wcjEi2UrN3fbtDsMiFvpcT1t6dCvS4k6kahzgVVTlI+dL9eZIL3NtgM4svIbpVWorRMLTCUkGDX3uqZkKF6U1sOn859Y+7WxPYFrvtcaZ7A26Y44fcKB0C1TTHytq0VVNIlnydvbsEG9P3SgLbPOhbrLOBh7GeRKnbcqomFrzk/twdKzMzGNiA8G7BF5PfgMvRLd6CBr9lWI9YmMVA33Qnj9+y/Plf04LbMLetR7jXdC6wRR2/WwFcq93/B/sDvdQMkqUm+Dl7dxE2+eHVBLd7ECYC97vP3q90ODfYGPf1T2A3rI7ghah0TJCh7yBsZrgEINNavfuGHPpWAKfkEPoyhdVHgAewmlmDsYG6i2v52XfqOSmUUHwzukqBy/SWkCw1w++SLa8muO3zGZdcCbyFTVjY2X1eKvQF53XgDmyW8LnAQ+iWeT5mY3UZ31ZTFD749Q85+IygahxFUEHyQeB8rOdvGNXr9F1H3WP7FmCDm1dm+RXVOMFVOWxjpq9UqYNDqLuX1EeVaa9Dwg19w7E6n76FvsMTHvpSn5dTc/yd310gOQIr0/WU3jcFtRj4F3AC0Ne9X7S2bG5+w5Y7VM2+gGW61bs85O0oL2B4mo6NARwKXIHNUBtbz+/MA/Yi+8KeG0RwsqnEltL7Ls/Hmev+vAz/SxYsBkamhd6hVHX/H+2usgE2ArbW27sgUrN3fezpG0TyQ1/qwnQA1vNX19CMn7DbuA8An5P96hgSrPeB47Al+C51FyclapY6zXGdEerpCzH4hS2MK89vsVlZuZxIFnrejt+6r3yti78rtMzCbik+6oLftAw/d03a31tjE33OxMbbbKe3emCh71H8nb37ShHti5nuwm9QLfvjFeyW42xU+sInU91xej12F0plYWp3t7uon66mSHbw2x+bpfur2jGS5z0Q/5YtmomN2byf6mt8Zhva3wdOdG10N3Zbsp3e8g3WzIU+327vLnbh5+Ui3Cdz3LF9tw7PWPkAWxnpCGzZvQ3VJIANr7oOm7SpMmsF1CjH7xfKWsAQF/4k/BO6byfzKdi4mEsbEPpqqsAq8PdzV9mSe/s1wUq2+Bj6BhZp6JP4h/Zh2ETEs4Dvi+i1r8ImFH2D3bGahI3l2x54QaEvuuAXxTqL52PFQ69AdeTC1A6/SrgMAfoQzC3sdB9jt35vJftb+MVupQt9vhZnHkhx3d6V5FkA3IWNTz4PmFEkwe9fWO3D9Vzg+58OheiD3+1UnwUblq7YWK1PXQBoiwbBFtrJ+LMm76VYAe9CXnRcgFYmyVYTbAbp4Z5t10KFPkmYRe68uxlWSPvbBL/WUhf8xgLraNf7E/zKiXbq+VrYcmqfY9XRTwA6a3cFriXWu+ZDuL4cuDGk53rFffBI3dpiEwh8C33FMntXijMADsVWpQpiqIuvStxrfNed6zfQro8++DXCj4kfnYB9sHIEk4ErsTIrEow2WLHuKK3CSslcH+JzLsduqyj8xe+kWGyzd6U4zXEXwn2xcYAjgA8T+Do7YHf3JrgQeDj+lxVLbPCbiw3m9klX4Gp3pT8ReAO4F5sS30K7skHWIfq1D6e5K9ywVbrwN1KHQSwsdqFPEzmkmMwC3nPH/i7UX4M2rtYAtnEBdxI2lKOZdn+4wW8FNrPS1wWRt8eWGzoZK/A4Hiv9sal2aU7OINql6eZhZQ2iOs4qsdsMWsHAb0tdT8BLagopYguwmfWjsCVKk2ob4GlsUlkr7fbwgh8uSC2IyevojVVG/xB42AXANtq99VoR8fMPx6b0R2ky+a19KoW12J3s1NMnUnWxfCzhr7AVtsOwnk4JMfitAMbE7PU0Bv6EFe+djNVHaq7dnHHfR9nb9wtwpwftUIHdal6kQ8I7qZItCn0i1T2DLVNZnvDXeT1Wg1VCDH5DscW946YJtl7rHVgv4Dba1X+wEdEW5J1N5uXXwjaRqjV/xQ8Lsdu7msghUrtnsZ6/JIe/jsAT2DKcEkLwA+s1GxLz17gh1nN5H/4sUeeDMqIdPPuBR22xEj96H8Vo9q5IbuFvYoJfYydsPL+EFPwAniL+Mx/bACdhs6P20G4Hoq3TCPCQZ20xV4eEFzR7VyT38Ncf+G9CX18JtrJXe+3q8ILfAqy4bhIGkm7h3iT3Ak21+yOziGhWhqnLS8AP2jWRWoIVZ9bsXZHclAPHkNylz9ZCq3yEGvwAPgGOJ/pZoEFYDes2Hg0cokMgEpPw79bEj2gN3yjNxSZyKPSJNPzC6WhsTfIFCXttjbBC/2XazfnLZczbk+7PR0nGWLmdsSVjjgGe06EQqhJtl9TwBPG+vVsK/BnoEeJzrsDqUC7Q4ZNRM+B0rMcoLIuw2ahR3CVbAgzDJs49S7LKmh0KrE30JcCKKvilwt9yd0XRPyEfCo9hg2Of1eEgEpkTsGLsj8d0+7fBJpCF7U4Fvzp1w9a8XSPk4DeUaIdHjXFB6Vys7l8SLmobYWuHK/gF0JC5eg7Yn+QUvW3mTjaH6nAQiUwLrPj6UTHd/rnATyE/51Kin6Tlu6+AL0J+ziWevPax2HCm/sCvCdmfB+mQjib4pT5wBgEPkIzCt02wnr8eOiREIlOKzfaOY/hbRDxrnuo8l2yrgHHAdtjt559i/np2BDbXIR3dG2IJcKILgJ8koC2aAdehQpEiUV+ExTH8tSXc24kiufgeq87RFytpNhqYHsPXsZqCXzBX2Pl6maoCyYfEPDgdCryA3XKSwlnp8dWx+BP+wCZ9xEE7BT+JgRnuawywOrCr+/4h2GTH66j9Ll5j4CKqTxbpRjSLAJxFfMcCJyb4gQ1iPR5bIu10YHCM22QINollmQ6PgtnYfX3u0Tb1JdyZf5Ks8KeLBomb37A1f3F/llD3mNGnqD5JZGdgM6A3MCDEC591sZq8H2kXNkzQYx/exW7/ngd8HdM26UF8B5jHRVcPQ9bGWK+N+BX+HsZqk4lIYVVm+TOprzew0jGDgfWwTp9PQ9jOTkB37S5/gl/K7Vi38YVYPaG4tcnFJL+mW9QDnnf0qC1K3fEq/ikj3rN9RYrBYuAe97l+BoXvjdteTe7nyX8ecAuwE7AVdrumIibt0gnomfB9Pw8b8BuVIzx7H6icj79KFf5EYmEBcDewN/BeAZ9nkJraz+CX8hvwIXa7pjc2fu5Dz9ulPVb0Msm+x2Z2RWUdYDdP2uJIbLaY+KsMG/N3pJpCxHu/uPB3JoXp8CnDOmjE0+CX7kN31b69C1b3Ap952jaDSH5plyYRPndLrKJ+1Jpjt/ab6OPgD5YD8z07Xh9W+BOJhTnYGMBTChD+ugP7qYnjEfxSyoFRwKnApthtv6nuQPFFT/xfkzjfJYHmEW3l/35Ev/TfIGxmmtT+wX0AfhV9VfgTiZcH3bm+PODHPUwX7PEKfjWNwCqLb4utceiDlURToyhbJeR/O/pWoh132RS4BFuuKwprAOfrY6DOkDURK9Xws4fhT2P+ROLhAWy51yBti8ooxTr44QLIt9htt+OBSRFvT2usUKTPds/z91d48MbZG5v4E3bIbgf8F9hSHwN1aoEN0TjQw/D3COr5E4mLSwm23EtToI+atbDBryUwEpuxU2iPAPsCb0XYNiXuNftsLaBDHr//CzDcg9dxIOHf8h0I7KCPgKy9BxyMX4u9lyr8icTGD9hdpqCshi0/JwUMfnsC+wOnAXeGsG2/Y7cyozzR+N6NvB35FbKsACZjPX9Re8odY4XWAaszdafe/jmb4j4DZnm0Tak6fwp/Iv57gmBXbDqO5E/CjCz49aD6+rVnAhOwZa4KaR5WDFoyu5jseya3xCqsp3uM4AfdNkQr4FngP9hM20Joj/Va34UGBTfUu1hv/C8ebVNqeTeFPxG/LQFuJrhOlW7YEm5SgOB3Hn+sc7YjNkZqD2wB50L5XLupTkdit0rr0gabVfUBcD82NiJlOfC0J6+lNbb8zxPuDR2k04DX0e3dILyPlVKY6dE2NXUXp0do94h4bTjBrejVBFsmVgIOfj2AwzP83+pYEeAXgH0oTPmTtgkK0IVyO/APbJZqh7Sv893/jceW0wHYFdgk7XdXYDM3fbqtfRA2CPhWYO08H2tjrBfxbmxhbwnGVBf+NOFDRHKxArgRq5wRhF3Ib6y7gl8NjYFzs2jU/bC6fCOxMUBBBqELI2yfsix/bhbRrkbSEfgL8DUwPe3rFuAcqs9cLXEhPd3j+DVoH6z37zwXAG8GLnMXIU1rfKWO4/Tvbet+fhg2KWGw3uoF8QF+zvbVmD8Rvz1OcEuGbuXOgZKl+nrojgROz/KxGrtAsScwzoWOl/Lcvo2IblmW5dhg9myD3ztEXxok20Gu+wPXp/17KVY+52APj9FWwEXu75dgi4Gnux2rM7dB2vfa4v+M7KRIzfZ9AX+WUGoCPOr+/qR2kYh3VmBVO4Ian3cBtkKIZKGunrkSGrakVmOsvtwoYCz5Tbc+D7udHIUl5FZwsnmM9nsb7LZwSiVwk3vNPmsLdKnxdRO2Akj69xT6wjUF6/nzabZvKer5E/HZUwE+1lHYHSHJI/g1Aq7Exkc1VAmwGzYGcALWw7ReFr+3AVbU9w2y720s1Ikjl5mf3xKfKuKbAr1qfG+i21ciDQ1/AzwLf5rtK+Kvd4AvA3qsVsAQNWn24aY2PYC/EdxYvR3d12AXMFJ+x8bG7Zr2vZ3wY6DmLHIbfHo31kPaNCb7/gTg1Rrfu96dvEv11pAGSJV6eRF/bvs2deGvMuAeBhHJzxxsidZ7A3q89dWk+QW/IRRmpuoa2IzNOPg3MD+Hny8j+8kgPuiN3Z5emva9SdhM4Dv01pAGSpV6GYWtLONL+EvVIVX4E/FHkEu4hbHufDNsuc8wzSfgYVi1Bb+TgWOK/GCsJPfVLOYDb2M9lnGwLrYyyoga338COBubWCPSEFPdsTXSs/D3iMKfiFd+wGr6xWV83l6EP2HsLOCBIB+wZq9eO2xCRbHf6psNPJjj7yzEyo6Ux+Q1NsLGYNYsvj0H6/Gr1GeS5OF9rHffpyLPqdm+GvMn4k/w+yxG21uK3SkL8yvwPFYz+A2kenHfYvUesKABvzc6RsEPMpdvuROVwZD8veuOMR/X9tUKHyJ+iNOyrJVJeM704Ncbje1KeYKGzdAtAb6L0etsBKyT4f/+DnyjQ0HyNBmrGznbo21qovAn4o1v8OvOQOKlB78hxGdGaiHNBMY08HeXADcQziDTIKwBHJLh/6ZhMzSX6JCQPE3BJnz4tDpMasLHIO0ekUj9CLymZgg/+PXmj8t4Fau7yW8JqhHARzF6vQcDLTL831fEqxte/PWuC3+/eBb+HlH4E4ncCIJbu1eyCH4tgIuxAojF7nNyn9RRUyVWDy8uB/HW1D09/XKsF1MkX+9jdSJ9Wtu3KTbhQ7d9RaIzmT8ux5mrEjVj9sHvHF3xAjY270Cs2zlf/8MKU8dBM+DMen7mMmxpNJEgwp+vs30V/kSiMZf8CzlXqBmzD35XqRnAHXRfB/RYK7BevzgoceGvPkOwcjUi+UrN9vVpzF+ZC3+6CBYJ3yrgNmBRHo+hzokcgt9fiM8as4VyA8HfznwJ692Ig6OwiR71GQqMS+gxcC3BVpGXuk3Geth9mu1bhsb8iURlDvBFHr//u5ow++A3FDijiMPfdditzKBr5SwBrsjzCiYsnciucvosrOhz0q6srsVKGbXUR0Lo4W+AZ+FPEz5EolGOdcA05Fw8F1WgyCn4ga1LexbwU5G9/mtcOCuUV4DDYhL+TsnhZ4cANyZg/0/Dep2udKGviT4SQjcFKxvkW6kXhT+R8D3bwHPLOGxypuQQ/MDKmGzjGjDpvX8LXOj7SwjP9RpwKLakm8+2A7rk8POXAscCX8b0GPgCKy8y0v17OrpVEJX33L7wacKHwp9INO4h99V+nlOzNSz44a6698R6qUaTzPVaPwX6hBT6Uka7Nl3gcbtsBHTL8XceAw6I4ZXWZ1hP3/R63g8SnvfdseRb+NNsX5FwzQDuy+HnlwPj1WwND35gU6L/iy2zdADJqahdCVwC7Eh+A0jzCX8DPQ9/lzTgd74EtgfOBj7x/Bj4GCtdswNWnFr88h5W6sWnIs+pUi/q+RMJz5VkX0XiMbTkW97BLz1Fv4gNvt4XGBvT17gSeBLYyh1IUQav0e4E8qZnbfQd8DwNn7SxALgTW/1lBP4NFVgJPOW2b5jn4bvYTcFKvfg221fhTyT8joih9fzMJ8A/0KofgQW/lApsksLuWE/J1cBbMXhtH7kQ0hsrV+LLMmqvAv2xno25EW/LN9hYvb7YOMR38ny8n7DbYr2BZ9zFQ5SWAU+77TmS+leMKIsgUAT5Xg1aVJNdJmF3HH7z6POkibuAPFanDZHQXEzdPX83uI4LyUFpjj//Tlo42BUrg7IhsK4Hr2U2NkZxIrZyxlhgqaftXgG8AOwMnOpC9aYhPfdy7Pbsg8Bwch9Em42pwOHYWMpNgAuw8YNtQnqN09wHwmdYyZBsfYaVFAhLLh9YCwj/Vvo8ouu9nYzdafg3/sy2bgSch40TnqrTh0goLsEmnV4BrOa+NwsrwzVWzZO7kvJhvfJ9jHZY79UAbKwXQNcCb/cyqm4F/cedQCcQ73Fbh7oDvAvWE7RmgI/9I7aayC3upPV6BK9vK6CXO3G2D/gYSdVwGgm8jfX0LtfbWwoYAGsG4u3dRWeYlgLro/FN9XkT2CnE55sFrEf+a8+Kfw4h/BnEp5DbZJd6lQbwGL8DD7mv1JX58e7kjguEW+T5HA/V+HB7l6pxckk5wT+H9VQ2dlc1J7gTzObYba9cfEJVmZJ5rv0qI26rD9zXo+51HQp0B5oDp2MzKHMJ/sOo6p17BvhBYU9CskpNICJxVRrw46VOvOnp9DbyXxFhbpHsj5Xu6zeqj2ton+PjLHbhyEephbSfrHGM5DKGbZULtCIiIhJh8KvNMo9DSFwkPfgqxImIiIRABWtFREREFPxERERERMFPRERERBT8RERERETBT0REREQU/ERERESk0ErVBCKB2gDY2P39bGwllro8j61NC/AyVXUOfdATW5IR95qOz/L3VmJ1KOe5f78NzNGh4bX9sOLx2R636YZitUfnA2+oKQPTBNjb/b0RcBHZ13RdDtwELMJWEpmk5hQFP5HgbAKci623vAG5Lbe3Sdrfp2JLz/0H+BB4P+TX0QtbSeVkF/h6AKs38LEeSfv7V+7ksxxbQ3k68LUOm8i0dcfdOsAZ2Ko5vfN4vAfcn6uoWrZuPPAitra7VjrJzprYEnybuousVsCWeTze4+7PZdhqV2ArOr1B+MsLJsWyJDxnEGv1igSph7tSDfuNdSq2/GC2WgMHAwOB/u5DOkir3IlzPLbM3awCvfaOWO/OpcBhIV0M/ob1Aj6ALS/4TZa/d5M7PsL0GLb2c33isFbv1sAQrPd285C2cbzbx/8Evo3oM8X3tXp3wnrzUheOYRjtLjTvxJa7jMKdQLcQn+8nd6GTbjPg2hweozOwbcjt9CEwI8/H+Bi4UsFPfLUjMCGC5+0C/Jxl4BsEnJZnL0kuvsaWQbyf4FZxaQeciPXubRTh/l4MPIzdLqwvGLyP9UqG6R/AVTEOfu3dRc1W7riNykIX9G8FZmM928Uc/DpiQykuBA6KcL/MxtaIfx54KeTnng6sG+LzzcB6udP1B8YUwXl1oju3AprcIf6J4rbQUqAyi587CbtNcn+IoQ/XC3AjdrvmAmzsT0O1AM53j3VzxKEPbB3vM4BPgdvdCTOTKG6zrIjxe2k7F5avizj0pS6YzgWmAWOB7kX6+dYI2B3rgXk94tCXCqAnYb3aNwCHhvjc5SG/1nJPzjdRWFbzIBSR+l2G9bptFeE2rIvdMvtzA39/R+y22y31BKwoNAfOcUHlYh1uedkBGx4wzsOA1RToA3zggkYxBcA9geewnrU1qZpM44OW2DCAp7Ee7o56GyX76kNEMlsfmIz1mvhy5fZ9jr/TxwWBVwn31kpDtMHG8r0Tg231TTOs9+YV4FgXpn3V1gWNkcCAhO+XtthM6RexHr4mHm9rI+Bv2K3fPfWWUvATKTYbAq8R/mDeuoxzJ/Zs7YfdWjuW4CegFFIfbKznNToMs9ILGI71Sq8Wo+3eHBgFXM0fx18lwXbAM8C/gLIYbXdf99l3ETahQRT8RBKvh/vg8+mWaDlwfZY/2wJ4EHjK/T2OOgNXYOMbuxDv8XaFsgg40IXkw2L8Oq7EJmFsloB9UolN7PgzNnt99xi/lpuxGcDd9FZT8BNJsp5Yr9o6nm3XePeVTeh7xp14WiVgf1yC3frdUIdmNRXAcVi9tuYJeD1dsfFvm8f8dazExqveh1/j+BpqU2yYSHe95RT8RJIa+kZ5GPoqyG6cYStsgPa+CdsvXYFOOjz/sK/vwgbmJ0U3bNxfnHv+OmMz1JO0QMLGLpQP1ttOwU8kKcqxsikvYBM6fDOG+usbtsbKMuyn3VkUShL6urq79+Gp2i9e2QT4K/AnvfUU/ETirsJ9qI3E39uJ12K3kDJphY3n21e7UxJgXeAerPSQ+BXKHwYuV1Mo+InEWXOsh6Gnp9v3CnUvst4KeFKhTxLoDGyMmfjlQmAtNYOCn0hclWJLW/nqOmB5hv9bzYW+AdqNkkBNsbFlm6gpvNIem/DRVU2h4CciwXoRm9GaKfQdr9AnCbe2Cxlbqim8spnbL+upKRT8RCQYFVgdrUz1607CCsOKJF1XbEUX8csm2EofouAnIgEYDbyV4f+aA+eriaSI7I4mFfjoKOBkNYOCn4jkZxnW27cyQ+i7D1vNQqRYNAZOI5lLu8VZqbsIXVNNoeAnIg03Dng9w/8NAY4hufXCRDLpBjyqZvDOxsDdagYFPxFpmHLghgz/1wkrcSFSrLYD9lEzeGdvoLeaQcFPRHL3BtbjV5szgI5qIiliTYBL1QzeaYHdjRAFPxHJwXJslY7adAFOVBOJsCMqWO6jfbHyUhqGouAnIlkaB7xZy/dLgTNRtXwRgDLgYven+KMl8Rrr17hI9kvzmicTEWm4Ve7qtgSru5fPe6oS6+2rrOX/+gGXxaRNKur5f33u+HHcrqrnhOh7r00/oD9WRDhJKmL+3lkN2Bp4Lwbb+h25rQe9AXBgyNs4Gvg4z8f4Rh/AIvmZCnzm/n6L+6BrBXwC7AHsmvaz7cn+ltRoYGJMr0wXYusdvwS8Xc/Png90APYE1tDhFKrPgfeB24HZdfxcZ6yHuSlwmKchsBHW6zcemxAVV0uB590F37vAf+v42fWBE4DWEQSQbLXB1vI9tp6LCx9847Y1W/tG0O7DgUeCfEAFP5HsLAKexlbKmA4syPBz97uvdFthXe2XAhtipQ9qcy2ZV+k4z9N2mYDNQJ4GfJXl75zr/uwOrAs8jC3LJYWxHHgOW/nie2BOlj0hqYuQLbHCyYd6eM7Y3V1ovRLD/bLQfabcDHyR5e98B4xxf9/BfaZsBPT07LUNBG4FpiTsvdQsgudsWogrJhGp26fAIGAw8EEdoS+TD9xJ9CBgJ6wnpebtnJfJvCZvf2A3z9rkHXfluxMwKofQl24GNqZxF+DvwA861AK1GHgSmwhxFNZTPacBj/MhcIR7nKexHiqfDI7ZfvkdK8DeF5us9UUDHyf9M+WlOi4ao1CG9fiJhxT8ROr2GDZe5eWAHm8uMAy7zfkCVbeobsB6ZmoqwXoMm3nUJle73oaRAT3eDGy9zx2Bv+D/7aE4WIL1uhxFcGOtprgLoCPcPvNFcwrQK1Igs7HbhaeQ/7itlDnYTNqTgR89eq2t0F1FBT+RGJmJ9cydkCGQ5Wucu1o/DniczOPiKoGzPWmT+S70/bVAj/8jcA1Vt4KlYUa4cFGo258jgc3c8/hgADbo3nf3Y4WnJxXo8R92F4ljPHm9x6ExvAp+IjHyV6xnrtC3T57Bll/LNJOvL9DOkzYZWMDQl+5OF/4qdBjmpBIbCH40VgS8kBa5E/sLHrzuEvyv6Xc31iP3foGfZw42GceH8NcY2EtvSwU/kTh4ErvF64MdsVlyUbuOzKuJFMK/sJ5Qyd63wJ+BlSE933JswshiD177AI/3y2zgthCfbz42EWdcxK+7EbaMmyj4iXhtAXA9fgxgL8NmAUfteuAKwu+B+ztVZXOk/uP2nBBDX8oEbBzhoohffzv8XMpwNnAw8GUEx8N1wLKIX39nTy5cRcFPJKP/AR95si2tsNt2UZrhgl8UpmM9OQt1WNbrNODFiJ57JMFNfmqoLbFJWL55lPrrWhbKaOCqiF9/P6z2oCj4iXhpIXbryhfLKMzEkmxVYrW4ogxe3wEP6dCs01SspE6UTsYKmEdpiWf7ZSzWUx6lB7HajVFaqreogp+Ir97y4OSV7hBs7cuozAD+40E73I7VPpPa3UL0vaLzyW3pq0I4xqN9sgK4kehXFJlF9GvnHqO3qIKfiK9GebY92wJNInz+fxP92C2wZZUe0eFZqyn4MbMWbLxflEWE+3q0Xxbjz6oVjwBfa7+Igp9IdZX4t+xTlCfR+WReSSQKY3WI1uoDcl9JplCmR3zxtNyj/fKQew/54GdsyIT2iyj4iaQZgV9V76M2l+jLQaSbScOWG0uylfg1NKECm8hQ7CuvLHMXTT61w1S9XUTBT6S6xR5ema6M8Lnvwgrj+mIKDV/TNKmW40+9yZThER63lZ60wTzgec/2S5RDJVbqrargJ+LjFfqDnm1TE6BThM8/w6MTaUpzHap/+Pxu4tk2NY3wvNISP1a5aYzV4PTJDKIbLrEdtpScKPiJeGMVMM2zbeoMHBvh8/u4uPrDOlSr+R3/elNWYD1eUeiJH0u3zfXwomkh0Q1l6QCsrrergp+Ib3wLOpVorFRNU9QE1TyAlevwyc8RB3Qf3jN34F9NQbCeyGLeL6LgJyIxU6YmiMXJtNhP8hrTJgp+IiIiRaJETSAKfiLSkJNHYzVDNRVqgmrUs6TjVETBTyQhyoGf1AzVrKcmqKYr/t3+bgP0ifD5fRirexLQzMPjJcpb8OoFVfATkXr8Cjwe4fP7WG3/XB0W1RwHdPRsm5pEuE3T8aPo+Pr411vfFGgb0XMvdl+i4Cci9Yjy5HG4h58Py3RIVLPSwzYpBXpE9Nxz8WP1nRUeXjitDxwQ0XNPwK/lHxX81AQiUoud8Ov2TE+gu3ZLNWXA3p5t0z5EV8POl/NZK2A3z/bLAL1dRMFPROriW4/F5tiYNqlSCvT3bJv20HmFlh4Gv330dhEFP5F4nNij0g04yqO2OEeHQ626489Sdi2BLkX6fqnpOPxYPg63HR20X2Ir8Nn7Cn4i/ppOdKUhyoAh+LEW7BpoRm8mewC7erItewL9Inz+2zzaL12A0zzZlsOBLSN8/i/1Ns3L6djkHAU/kSLwINEu/bQJfvT6nQmspcMho+FEN6EipTlwWcTb8J1n++Usd9ESpdbAhRFvw516i+ale9BZTcFPxF+NiG7B+9TzXwi0iHAb2rvgJ3W3UdQ9onsC20X4/OXYbFqfrIXV9IvSkcBGEW9DU71F81JBwBOmFPxE/LUAGBbxNmwOHB/Rc3cARhDt+KS4uAfYKqLn7g3cFfHrn+C+fHMysEFEz70dcH3Er38qfpTYiXsHQLOgH1BE/OVDSZW7gFMi2JYrgd11CGRlbeAFwr/luynwP6KfcV1KdGVk6rKO2y9ht09j4CIPLpo+B2bp7ZmXjgTcc6zgJ+K3T4i+6n0JcDfQK8TnPJjob5PFTTfCn/18Pn6Mv5zs8X7ZGBgccui7D5vUEaVKrMdP8s9pmtwhUkRGEe04v/TPihHYraswQt8TWCFcyc0ZwE0U/vZiD+BW4ERPXvejnu+Xq7Dl5ApdhLwU+A9wggevucS9jyV/gwlwrLWCn4jfSrDZvT5YH+v5K1T4awU8hq1R3Ey7vsEuBt6kcD202wJvAed58nrH49+M3trOtf2A1yjcRJw9gbeJbkxuTc8CcxL23ooqM63nLh6ysQ5wObChgp9IPFViA/d/8GR7GrvteYLgaoOthvVQvA4cjT8FieOsE/AicB3B3YrtCtyI9UKv7tFr/QhYGJP9shEw2p2Y1wzoMbtjJVOedqHcF+9hs62TZGGEr+kS9/6r7/35DnAtcESmH1RFbRH//QR8j43h8uWq90j3wTIc+CfwMzA7x8fpCLRxIbK3dnPgOmO19U4E7nXh4HdyW46vowv7Z2MTfFb37DUuAm6J2X5Zz52YTwX+jY3HmwOsyuExWrh9cz52G7C1Z69xprtATJrXgA+A7SMMf+u4z9qxQF+qxv8dUeP9uRdW1HyRgp9IPP3Tvcl9UoItTTUIq6E2CvjUncDuJ3MvzInAFlhx6Maoh6/Q1sBmSJ/negPGAw+R+Tbc2tjEgDYu7DXGlmPz0RPAjJjul7VdALwM+D+sh+xjFy5q0xMY4P5+IDajuoWnr+1ed5EhwRvk/jyDuist9HHvYQU/kZiaBvyGfz0uuCvOplgvYMp5ZF5urrN2ZyRaYUu87eH2T6aevxbuhOG7SmysYWUC9svB7mslmcuftCYeE56WAZMS/D4q8+jCu77tPAdbelPBTySGPgOexJaBioOO2mVeS0JR7A+BpxK2Xxon4MLoTeDlBL93PgC2icF2lpChp16TO0Ti4zZsNQ+RYrcSK1uzTE3hlWXADQl/jffHaFsPre1CQsFPJD6+AY5VM4jwGcnr7UuCt4AxCX+NcRqT3Jlaanoq+InEy/+5D1eRYjUHOIzcZsFKOK4tgtf4ObaiUlycpeAnEm9LgaFqBilijwJfqRm881dsxnjS/QJ8EaPt3ZIaa0Ur+InEzytF8gErUtNMYJiawTtfY2PfiqUX9uYYbWsPrHSQgp9IjC3DSj+8qaaQIvIrcBDq7fPRMS6UF4vFMdveCxX8ROJvHnA1NrtRpBg8AkxRM3hnKDC1yF7zdODVGG1vewU/kWQYDZxG8tbDFKlpDLb6iPjlceBibOWeYrIUuD5G27slsLWCn0gy3A+MUzNIgs3HereXqym88jNWS7FYTSQ+harbAZso+IkkxynA+2oGSaB52HhWTWbyy0/YusEfFnEbLMcmeVTEZHvPV/ATSY4fsEHvH6opJEF+Bw5BPdq++Rk4EFu6rNi9gQ25iYO1gE0V/ESS40dgf+CjBL9GTWSpblmCT77zgIExDX0LgU8Tul9+cReZusNQ9Zk0lHgsHdgJ6K3gJ5K88LdvQsPArdg4L6myAluL88WEva75LvSNjen2LwD2Ad5J2H6ZBRwAvKu3XjVjic9QhNOAEgU/kWT52Z10XiI5PWTDgAuwMUVSpTEwF/gbtoxUEizElmOL83qvZVjP2IAEhb9fgf0U+jI6Ahty47t1gbUV/ESS51d30jk95uGvAhhE1VqTr2rX/kELdzLug63oEmcPAf1iHvpSmrpQfgA2+zPOPsTuJLynt1tG84hHXdU1gT8p+Ikk133AGdii9nEzAxgMPA1Uuu+pnEdmC12vw0sxbaf/ACeRvELAv2Gzkv8S04uwm4BeFF+B5nw+b31ftq6Vgp9Ist0LbI7NPquMwfYuw2oT7g88WuP/dvV4u1cQ/QDvBVgP00AXOOLgO6zMxCkkd/LOLOAaF2wXxmSbP8fuGAyJyeeGT5+3pwNLPN7GCxT8RJJvJrA3cBR+rzE5DdgWOBn4pJb/b+nxts8GvvdgO1YBI7Firdfid2/vLVhv0m3430sShIfcfvG9/MeV2NCBe/TR2eDwtyn+rqVequAnUhzKgaeAzbDJEgs82rZPgXOBvsDHdfxcY4/btwWwmmdB9EpsosRcz9rqRWBH4CJsbFQx+RG79TsImODZtn3sgvi1xKdn0lffYWVvHsSfJTWXYLejeyr4iW+iOCabAyVF9IF0JrCdC4BRzjpciZUX2AX4F/X3Tn0dwTaWZflziwi/NzWb43Y81ntzW8RBoxIY5QLf/tiEh7BuITaLYL/UdwJ+GuiPleOZHOF+WY7VSjwH2J1wS0E192y/BO13bJxyb+DhCMP0AncBuC02pGJaSfmwXooa4pO2wPYRBJA3iEcRzkLYy4WvE7Dq7oW0CJgO3Indzs1lxmNrrFcwTF8B32T5s72wWXM+H7d7ADtgt9O7FXj7lrr2+zdWWPytiI7vPthapYXS2L2HXk4LU+PJfsxiI2BPF7z2BrYocHvMxyZP3Qp8FmHw3AloFdJz7efCdpS3X/fClnhb253nCukjdxzeCHxJjcL+Cn4iktINK6fRGRugDLC6C1wNDSapcW8jgSnAF6gWmA86u6DRETjbhY/ueTxeJdabDHZr6xbsFv5ENXXO9ge2BE7Eepy75vFYFW5/zAaecQHgE7TcWpS2cF+bA4e773Ul+7sLNS3BSngBPICV3xlZ1y8o+IlIbVIfQtu7MAg2K7G+cPAy8Lb7+zfuZAM261X83ddNgFOxsYopA10AyWS5C3iLXcB/Ii0EVqhZA9kvrbHbc6Vp3/8zsH4dv7fQ7ZcKbMLUbOw2v96D/n7OHghsjPUeX0D944UfpmroyySqljbMah//P6he2Dn7/5jTAAAAAElFTkSuQmCC" alt="stakrabbit" />
+      </div>
+      <div class="relay-status">
+        <span class="dot off" id="relay-dot"></span>
+        <span id="relay-text">Connecting…</span>
+      </div>
+      <div id="account-area"></div>
+    </div>
+
+    <div class="flyer">
+      <h1>Free Gig Market<br>for local casual jobs</h1>
+      <p class="lede">Local classifieds for casual neighbourhood, single/repeat odd jobs — lawnmowing, car washing, dog walking, home help, flatpack assembly, shopping collection, etc.</p>
+      <div class="hero-tags">
+        <span class="hero-tag">APPLY OR POST JOBS FOR FREE IN MINUTES</span>
+        <span class="hero-tag">PAYMENTS VIA CASH, BANK TRANSFER OR ⚡SATS</span>
+        <span class="hero-tag">DECENTRALISED 'WEB OF TRUST' MODEL</span>
+        <span class="hero-tag">NO SIGNUP TO BROWSE</span>
+      </div>
+      <div class="post-cta">
+        <button class="btn btn-primary" id="open-post">Post a job</button>
+        <button class="btn btn-ghost" id="scroll-board">Browse jobs ↓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    <span>⚡ Gardening &amp; lawns · from £15</span>
+    <span>⚡ Dog walking · from £10</span>
+    <span>⚡ House cleaning · from £13</span>
+    <span>⚡ Bar &amp; event shifts · from £12/hr</span>
+    <span>⚡ Moving &amp; assembly · from £20</span>
+    <span>⚡ Car washing · from £8</span>
+    <span>⚡ Local errands · from £6</span>
+    <span>⚡ Gardening &amp; lawns · from £15</span>
+    <span>⚡ Dog walking · from £10</span>
+    <span>⚡ House cleaning · from £13</span>
+    <span>⚡ Bar &amp; event shifts · from £12/hr</span>
+    <span>⚡ Moving &amp; assembly · from £20</span>
+    <span>⚡ Car washing · from £8</span>
+    <span>⚡ Local errands · from £6</span>
+  </div>
+</div>
+
+<div class="locate-bar">
+  <div class="locate-inner">
+    <div class="locate-search">
+      <span>🔎</span>
+      <input id="job-search" placeholder="Search jobs…" />
+    </div>
+    <div class="locate-search">
+      <span>📍</span>
+      <input id="location-search" placeholder="Search near a town or postcode…" />
+    </div>
+    <button class="locate-btn" id="use-my-location">Use my location</button>
+    <div class="sort-toggle" role="group" aria-label="Sort order">
+      <button id="sort-newest" class="active">Newest</button>
+      <button id="sort-nearest">Nearest</button>
+    </div>
+    <div class="sort-toggle" role="group" aria-label="View mode">
+      <button id="view-board" class="active">Board</button>
+      <button id="view-map">Map</button>
+    </div>
+    <div class="currency-chip" id="currency-chip">Detecting currency…</div>
+    <div class="locate-status" id="locate-status"></div>
+  </div>
+</div>
+
+<div class="filters">
+  <div class="filters-inner" id="filters"></div>
+</div>
+
+<main>
+  <div class="section-label" id="board-anchor">On the board</div>
+  <div class="grid" id="grid"></div>
+  <div id="map-view"></div>
+</main>
+
+<footer>
+  <div class="proto-tags">
+    <span>No signup to browse</span>
+    <span>Free to post</span>
+    <span>Cash · Bank · Sats</span>
+  </div>
+  <p>Prototype for pitch purposes · listings marked "Demo" are illustrative, not live network data</p>
+</footer>
+
+<!-- Overlay -->
+<div class="overlay" id="overlay"></div>
+
+<!-- Post drawer -->
+<div class="drawer" id="post-drawer">
+  <div class="drawer-head">
+    <h2>Post a job</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="notice" id="signer-notice">Checking your setup…</div>
+    <form id="post-form">
+      <div class="field">
+        <label for="f-title">Job title</label>
+        <input id="f-title" required placeholder="e.g. Weekly lawnmowing, small garden">
+      </div>
+      <div class="field">
+        <label for="f-category">Category</label>
+        <select id="f-category"></select>
+      </div>
+      <div class="field">
+        <label for="f-location">Location (town / village)</label>
+        <input id="f-location" required placeholder="e.g. Pucklechurch, South Glos">
+      </div>
+      <div class="field">
+        <label>Accepted payment methods</label>
+        <div class="method-row">
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="m-lightning" style="margin-right:5px;">Lightning</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="m-cash" style="margin-right:5px;" checked>Cash</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="m-bank" style="margin-right:5px;">Bank transfer</label>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="f-price-gbp">Price in £</label>
+          <input id="f-price-gbp" type="number" min="1" placeholder="15" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-desc">Description</label>
+        <textarea id="f-desc" required placeholder="What needs doing, how often, any tools supplied…"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-media">Photos, audio, or video (optional)</label>
+        <input id="f-media" type="file" accept="image/*,audio/*,video/*" multiple>
+        <div id="f-media-preview" style="margin-top:10px;"></div>
+      </div>
+      <div class="submit-row">
+        <button type="submit" class="btn btn-primary" id="post-submit-btn" style="width:100%; justify-content:center;">Post job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Pay drawer -->
+<div class="drawer" id="pay-drawer">
+  <div class="drawer-head">
+    <h2>Payment methods</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="pay-target">
+      <div class="section-label" id="pay-title" style="justify-content:center; border:none;"></div>
+      <div class="pay-amount" id="pay-amount-line"></div>
+    </div>
+
+    <div class="pay-tabs" id="pay-tabs"></div>
+
+    <div class="pay-panel" data-panel="lightning">
+      <div class="plain-note"><strong>Lightning.</strong> Add your Lightning address to your application message — if you're taken on for this job, the poster pays you there once it's done.</div>
+    </div>
+
+    <div class="pay-panel" data-panel="cash">
+      <div class="plain-note"><strong>Cash on completion.</strong> Agree a time with the poster and collect cash in person once the job's done.</div>
+    </div>
+
+    <div class="pay-panel" data-panel="bank">
+      <div class="plain-note"><strong>Bank transfer.</strong> Share your bank details directly with the poster once you're confirmed for the job — stakrabbit doesn’t store or transmit bank details for your safety.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Apply drawer -->
+<div class="drawer" id="apply-drawer">
+  <div class="drawer-head">
+    <h2>Apply — <span id="apply-job-title"></span></h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body" id="apply-drawer-body">
+  </div>
+</div>
+
+<!-- Inbox drawer -->
+<div class="drawer" id="inbox-drawer">
+  <div class="drawer-head">
+    <h2>Inbox</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="inbox-list"></div>
+  </div>
+</div>
+
+<!-- My Jobs drawer -->
+<div class="drawer" id="myjobs-drawer">
+  <div class="drawer-head">
+    <h2>My jobs</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="section-label" style="border:none;">Posted by you</div>
+    <div id="myjobs-posted" style="margin-bottom:28px;"></div>
+    <div class="section-label" style="border:none;">Applied by you</div>
+    <div id="myjobs-applied"></div>
+  </div>
+</div>
+
+<!-- Job detail drawer -->
+<div class="drawer" id="jobdetail-drawer">
+  <div class="drawer-head">
+    <h2 id="jobdetail-title">Job details</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body" id="jobdetail-body">
+  </div>
+</div>
+
+<!-- Auth drawer -->
+<div class="drawer" id="auth-drawer">
+  <div class="drawer-head">
+    <h2>Log in</h2>
+    <button class="close-x" data-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="auth-tabs" id="auth-tabs">
+      <button class="auth-tab active" data-auth="extension">Extension</button>
+      <button class="auth-tab" data-auth="create">Create account</button>
+      <button class="auth-tab" data-auth="import">I have a key</button>
+    </div>
+
+    <div class="auth-panel active" data-auth-panel="extension">
+      <p class="plain-note" style="margin-bottom:16px;">Use a Nostr browser extension (like Alby or nos2x) to log in with your existing identity — your private key stays on your device, not with us.</p>
+      <button class="btn btn-primary" id="auth-connect-extension" style="width:100%; justify-content:center;">Connect extension</button>
+      <div class="notice" id="auth-extension-status" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <div class="auth-panel" data-auth-panel="create">
+      <div id="create-step-1">
+        <p class="plain-note" style="margin-bottom:16px;">This generates a new Nostr key pair in your browser. Your private key (nsec) is your account — there's no email or password, and stakrabbit never sees or stores it on a server.</p>
+        <button class="btn btn-primary" id="auth-generate-key" style="width:100%; justify-content:center;">Generate a new key</button>
+      </div>
+      <div id="create-step-2" style="display:none;">
+        <div class="key-warning">
+          <strong>Save this private key now.</strong>
+          It's the only way to access this account. Anyone who has it can post as you. If you lose it, it can't be recovered.
+        </div>
+        <label style="font-size:12.5px; font-weight:600; margin-bottom:6px; display:block; color:var(--ink-soft);">Your private key (nsec)</label>
+        <div class="addr-row" style="margin-bottom:16px;">
+          <span id="new-nsec" style="flex:1; word-break:break-all; font-size:12px;"></span>
+          <button id="copy-nsec" type="button">Copy</button>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="confirm-saved-key">
+          I've saved my private key somewhere safe.
+        </label>
+        <div class="field">
+          <label for="f-create-passphrase">Encrypt with a passphrase (optional)</label>
+          <input id="f-create-passphrase" type="password" placeholder="Leave blank to skip">
+        </div>
+        <button class="btn btn-primary" id="auth-finish-create" disabled style="width:100%; justify-content:center;">Continue</button>
+      </div>
+    </div>
+
+    <div class="auth-panel" data-auth-panel="import">
+      <div class="field">
+        <label for="f-import-key">Private key (nsec or hex)</label>
+        <input id="f-import-key" placeholder="nsec1… or 64-character hex key">
+      </div>
+      <div class="field">
+        <label for="f-import-passphrase">Encrypt with a passphrase (optional)</label>
+        <input id="f-import-passphrase" type="password" placeholder="Leave blank to skip">
+      </div>
+      <button class="btn btn-primary" id="auth-import-key" style="width:100%; justify-content:center;">Log in</button>
+      <div class="notice" id="auth-import-status" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <div class="auth-panel" data-auth-panel="unlock">
+      <p class="plain-note" style="margin-bottom:16px;">Enter your passphrase to unlock this browser's saved key.</p>
+      <div class="field">
+        <label for="f-unlock-passphrase">Passphrase</label>
+        <input id="f-unlock-passphrase" type="password" placeholder="Your passphrase">
+      </div>
+      <button class="btn btn-primary" id="auth-unlock" style="width:100%; justify-content:center;">Unlock</button>
+      <div class="notice" id="auth-unlock-status" style="display:none; margin-top:14px;"></div>
+      <button type="button" class="btn btn-ghost" id="auth-unlock-forget" style="width:100%; justify-content:center; margin-top:12px; color:var(--ink); border-color:var(--line);">Forget this key &amp; start over</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { generateSecretKey, getPublicKey, finalizeEvent, nip19 } from "https://esm.sh/nostr-tools@2";
+import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
+(function(){
+  const RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]; // network endpoints
+  const FEED_TAG = "satrabbit";
+
+  const CATEGORIES = [
+    { slug:"gardening",  label:"Gardening & lawns" },
+    { slug:"dogwalking", label:"Dog walking" },
+    { slug:"cleaning",   label:"Cleaning" },
+    { slug:"moving",     label:"Moving & furniture" },
+    { slug:"bar-event",  label:"Bar & event shifts" },
+    { slug:"carwash",    label:"Car washing" },
+    { slug:"errands",    label:"Errands & odd jobs" },
+  ];
+  const catLabel = slug => (CATEGORIES.find(c=>c.slug===slug)||{}).label || slug;
+
+  const DEMO_LISTINGS = [
+    { id:"demo-1", title:"Weekly lawnmowing, medium garden", category:"gardening", location:"Pucklechurch, South Glos", price:{gbp:12}, methods:["lightning","cash"], desc:"Regular Thursday mow, own mower needed. Ongoing weekly work through summer.", lnaddr:"finn@getalby.com", demo:true, lat:51.4881, lon:-2.4436 },
+    { id:"demo-2", title:"Two dog walks daily while I'm at work", category:"dogwalking", location:"Downend, Bristol", price:{gbp:15}, methods:["lightning"], desc:"Two friendly spaniels, 30 min each, weekday mornings and lunchtimes.", lnaddr:"rosie@walletofsatoshi.com", demo:true, lat:51.4949, lon:-2.4874 },
+    { id:"demo-3", title:"Bar cover for Saturday night event", category:"bar-event", location:"Chipping Sodbury", price:{gbp:60}, methods:["cash"], desc:"Village hall fundraiser, 6–11pm, experience preferred but not essential.", lnaddr:"", demo:true, lat:51.5426, lon:-2.3903 },
+    { id:"demo-4", title:"Flat-pack wardrobe assembly", category:"moving", location:"Yate", price:{gbp:50}, methods:["bank","cash"], desc:"Two wardrobes and a bed frame, tools on site, should take about 2 hours.", lnaddr:"", demo:true, lat:51.5406, lon:-2.4126 },
+    { id:"demo-5", title:"Fortnightly house clean, 2-bed flat", category:"cleaning", location:"Kingswood, Bristol", price:{gbp:20}, methods:["lightning","bank"], desc:"Standard clean, kitchen and bathroom focus, own products provided.", lnaddr:"amara@getalby.com", demo:true, lat:51.4614, lon:-2.5178 },
+    { id:"demo-6", title:"Weekend car wash round", category:"carwash", location:"Frampton Cotterell", price:{gbp:20}, methods:["cash"], desc:"Hand wash and quick valet, driveway access, hose and power available.", lnaddr:"", demo:true, lat:51.5241, lon:-2.4457 },
+    { id:"demo-7", title:"Prescription pickup for elderly neighbour", category:"errands", location:"Pucklechurch", price:{gbp:3}, methods:["lightning","cash"], desc:"Weekly pharmacy run, roughly 20 minutes, flexible day.", lnaddr:"maureen@getalby.com", demo:true, lat:51.4881, lon:-2.4436 },
+  ];
+
+  let listings = [...DEMO_LISTINGS];
+  let activeFilter = "all";
+  let searchQuery = "";
+  let sockets = [];
+  let connectedCount = 0;
+  let inboxMessages = []; // decrypted DMs to currentUser: { id, from, content, created_at, listingId }
+  const listingLastSeenAt = {}; // listing id -> latest created_at processed, for out-of-order relay delivery
+  const pendingCloseConfirms = new Set(); // listing ids in "confirm close?" state — kept out of the DOM
+  // so a grid re-render triggered by an unrelated incoming relay event (which rebuilds every card)
+  // doesn't silently drop the confirmation the user is mid-click on
+  let myApplications = []; // jobs currentUser has applied to: { listingId, listingTitle, posterPubkey, message, sentAt }
+
+  // ---------- proximity state ----------
+  let refCoords = null;     // { lat, lon } — the point we're measuring distance from
+  let refLabel = "";        // human label for status line
+  let sortMode = "newest";  // "newest" | "nearest"
+
+  // ---------- view + currency state ----------
+  let viewMode = "board";   // "board" | "map"
+  let leafletMap = null;
+  let markerLayer = null;
+  let currentCurrencyCode = "GBP"; // display currency, derived from national geolocation
+  let fxRate = 1;                  // GBP -> currentCurrencyCode
+
+  const COUNTRY_CURRENCY = {
+    GB:"GBP", IE:"EUR", FR:"EUR", DE:"EUR", ES:"EUR", IT:"EUR", NL:"EUR", PT:"EUR",
+    BE:"EUR", AT:"EUR", FI:"EUR", GR:"EUR", LU:"EUR", SI:"EUR", SK:"EUR", EE:"EUR",
+    LV:"EUR", LT:"EUR", CY:"EUR", MT:"EUR",
+    US:"USD", CA:"CAD", AU:"AUD", NZ:"NZD", CH:"CHF", SE:"SEK", NO:"NOK", DK:"DKK",
+    PL:"PLN", CZ:"CZK", HU:"HUF", JP:"JPY", IN:"INR", ZA:"ZAR", BR:"BRL", MX:"MXN",
+    SG:"SGD", HK:"HKD", AE:"AED", CN:"CNY", KR:"KRW"
+  };
+
+  function formatFiat(gbpAmount){
+    const converted = gbpAmount * fxRate;
+    try{
+      return new Intl.NumberFormat(undefined, {
+        style:"currency", currency: currentCurrencyCode,
+        maximumFractionDigits: converted < 20 ? 2 : 0
+      }).format(converted);
+    }catch(e){
+      return currentCurrencyCode + " " + converted.toFixed(2);
+    }
+  }
+
+  async function setCurrencyForCountry(countryCode, sourceLabel){
+    const code = COUNTRY_CURRENCY[countryCode] || "GBP";
+    const chip = document.getElementById("currency-chip");
+    if(code === currentCurrencyCode){
+      chip.textContent = `Prices in ${code}${sourceLabel ? " · " + sourceLabel : ""}`;
+      return;
+    }
+    try{
+      if(code === "GBP"){
+        fxRate = 1;
+      } else {
+        const res = await fetch(`https://api.frankfurter.app/latest?from=GBP&to=${code}`);
+        const data = await res.json();
+        fxRate = data.rates && data.rates[code] ? data.rates[code] : 1;
+      }
+      currentCurrencyCode = code;
+      chip.textContent = `Prices in ${code}${sourceLabel ? " · " + sourceLabel : ""}`;
+      renderGrid();
+    }catch(e){
+      chip.textContent = `Prices in ${currentCurrencyCode} (rate unavailable)`;
+    }
+  }
+
+  async function detectCurrencyFromIP(){
+    try{
+      const res = await fetch("https://ipapi.co/json/");
+      const data = await res.json();
+      if(data && data.country_code){
+        await setCurrencyForCountry(data.country_code, "auto-detected");
+      } else {
+        document.getElementById("currency-chip").textContent = "Prices in GBP";
+      }
+    }catch(e){
+      document.getElementById("currency-chip").textContent = "Prices in GBP";
+    }
+  }
+
+  function haversineMiles(lat1, lon1, lat2, lon2){
+    const R = 3958.8; // miles
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2-lat1);
+    const dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function setLocateStatus(msg){
+    document.getElementById("locate-status").textContent = msg;
+  }
+
+  async function geocode(query){
+    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(query);
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if(!res.ok) throw new Error("geocode failed");
+    const data = await res.json();
+    if(!data.length) throw new Error("no match");
+    const countryCode = data[0].address && data[0].address.country_code
+      ? data[0].address.country_code.toUpperCase() : null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), label: data[0].display_name, countryCode };
+  }
+
+  async function reverseGeocode(lat, lon){
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if(!res.ok) throw new Error("reverse geocode failed");
+    const data = await res.json();
+    return data.address && data.address.country_code ? data.address.country_code.toUpperCase() : null;
+  }
+
+  // ---------- search ----------
+  function matchesSearch(l){
+    if(!searchQuery) return true;
+    return `${l.title} ${l.desc} ${l.location}`.toLowerCase().includes(searchQuery);
+  }
+
+  // ---------- render filters ----------
+  function renderFilters(){
+    const el = document.getElementById("filters");
+    const searchable = listings.filter(l=>l.status !== "inactive").filter(matchesSearch);
+    const counts = { all: searchable.length };
+    CATEGORIES.forEach(c => counts[c.slug] = searchable.filter(l=>l.category===c.slug).length);
+
+    const chips = [{slug:"all", label:"All jobs"}, ...CATEGORIES];
+    el.innerHTML = "";
+    chips.forEach(c=>{
+      const btn = document.createElement("button");
+      btn.className = "chip" + (activeFilter===c.slug ? " active" : "");
+      btn.innerHTML = `${c.label} <span class="count">${counts[c.slug]||0}</span>`;
+      btn.addEventListener("click", ()=>{ activeFilter = c.slug; renderFilters(); renderGrid(); });
+      el.appendChild(btn);
+    });
+  }
+
+  // ---------- render grid ----------
+  function computeVisibleItems(){
+    let items = listings.filter(l=>l.status !== "inactive");
+    items = activeFilter==="all" ? items : items.filter(l=>l.category===activeFilter);
+    items = items.filter(matchesSearch);
+
+    if(refCoords){
+      items.forEach(l=>{
+        l._dist = (typeof l.lat === "number" && typeof l.lon === "number")
+          ? haversineMiles(refCoords.lat, refCoords.lon, l.lat, l.lon)
+          : null;
+      });
+    }
+
+    if(sortMode === "nearest" && refCoords){
+      items.sort((a,b)=>{
+        if(a._dist==null && b._dist==null) return 0;
+        if(a._dist==null) return 1;
+        if(b._dist==null) return -1;
+        return a._dist - b._dist;
+      });
+    }
+    return items;
+  }
+
+  function renderGrid(){
+    const grid = document.getElementById("grid");
+    const items = computeVisibleItems();
+
+    if(items.length===0){
+      grid.replaceChildren();
+      grid.innerHTML = `<div class="empty">No listings in this category yet. Be the first to post one.</div>`;
+    } else {
+      // one pass over all listings to count per-poster totals, instead of re-filtering the
+      // whole array for every card (that was O(n²) — cheap at demo scale, not at real scale)
+      const pubkeyCounts = {};
+      listings.forEach(x=>{ if(x.pubkey) pubkeyCounts[x.pubkey] = (pubkeyCounts[x.pubkey]||0) + 1; });
+
+      const cards = items.map(l=>{
+        const card = document.createElement("div");
+        card.className = "card";
+        const distBadge = (sortMode==="nearest" && refCoords && l._dist!=null)
+          ? `<span class="dist-tag">${l._dist < 0.1 ? "&lt;0.1" : l._dist.toFixed(1)} mi</span>` : "";
+        const posterListingCount = l.pubkey ? (pubkeyCounts[l.pubkey]||0) : 0;
+        const trustBadge = posterListingCount > 1
+          ? `<span class="trust-tag">${posterListingCount} listings from this poster</span>` : "";
+        const isOwner = currentUser && l.pubkey === currentUser.pubkey;
+        const confirmingClose = isOwner && pendingCloseConfirms.has(l.id);
+        const actionLabel = isOwner ? (confirmingClose ? "Confirm close?" : "Close listing") : "Apply";
+        const safeMedia = (l.media||[]).filter(m => m && m.url && /^https?:\/\//i.test(m.url));
+        const thumb = safeMedia.find(m => mediaKind(m.type||m.url) === "image");
+        const thumbHtml = thumb
+          ? `<img src="${escapeHtml(thumb.url)}" alt="" loading="lazy" style="width:100%; height:140px; object-fit:cover; border-radius:10px; margin-bottom:14px;">` : "";
+        const otherMediaKinds = new Set(safeMedia.filter(m=>mediaKind(m.type||m.url)!=="image").map(m=>mediaKind(m.type||m.url)));
+        const mediaBadge = otherMediaKinds.size
+          ? `<span class="trust-tag">${[...otherMediaKinds].map(k=>k==="video"?"🎬":k==="audio"?"🎵":"📎").join("")}</span>` : "";
+        card.innerHTML = `
+          <div class="card-top">
+            <span class="cat-tag">${catLabel(l.category)}</span>
+            <div style="display:flex; gap:6px;">
+              ${distBadge}
+              ${trustBadge}
+              ${mediaBadge}
+              ${l.demo ? '<span class="demo-tag">Demo</span>' : ''}
+            </div>
+          </div>
+          <h3>${escapeHtml(l.title)}</h3>
+          <div class="loc">📍 ${escapeHtml(l.location)}</div>
+          <div class="method-row">
+            ${(l.methods||[]).map(m=>`<span class="method-tag">${METHOD_LABEL[m]||m}</span>`).join("")}
+          </div>
+          <p class="desc">${escapeHtml(l.desc)}</p>
+          ${thumbHtml}
+          <div class="card-foot">
+            <div class="price">${formatPriceLine(l)}</div>
+            <button class="pay-btn" data-id="${l.id}">${actionLabel}</button>
+          </div>
+        `;
+        const actionBtn = card.querySelector(".pay-btn");
+        if(isOwner){
+          actionBtn.addEventListener("click", ()=>{
+            if(pendingCloseConfirms.has(l.id)){
+              pendingCloseConfirms.delete(l.id);
+              handleCloseListing(l);
+            } else {
+              pendingCloseConfirms.add(l.id);
+              renderGrid();
+              setTimeout(()=>{
+                if(pendingCloseConfirms.delete(l.id)) renderGrid();
+              }, 3000);
+            }
+          });
+        } else {
+          actionBtn.addEventListener("click", ()=> openApplyDrawer(l));
+        }
+        return card;
+      });
+      grid.replaceChildren(...cards);
+    }
+
+    if(viewMode === "map") renderMarkers(items);
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  }
+
+  // two-click inline confirm (no native dialog): first click asks, second click within
+  // a few seconds acts — resets automatically so a stray later click doesn't fire it
+  function wireConfirmButton(btn, confirmLabel, action){
+    const originalLabel = btn.textContent;
+    let resetTimer = null;
+    btn.addEventListener("click", ()=>{
+      if(btn.dataset.confirm === "1"){
+        clearTimeout(resetTimer);
+        action();
+      } else {
+        btn.dataset.confirm = "1";
+        btn.textContent = confirmLabel;
+        resetTimer = setTimeout(()=>{
+          if(btn.isConnected){ btn.dataset.confirm = ""; btn.textContent = originalLabel; }
+        }, 3000);
+      }
+    });
+  }
+
+  const METHOD_LABEL = { lightning:"⚡ Lightning", cash:"💷 Cash", bank:"🏦 Bank" };
+
+  function formatPriceLine(l){
+    if(l.price && l.price.gbp) return formatFiat(l.price.gbp);
+    return "Price on request";
+  }
+
+  // ---------- category select ----------
+  function populateCategorySelect(){
+    const sel = document.getElementById("f-category");
+    sel.innerHTML = CATEGORIES.map(c=>`<option value="${c.slug}">${c.label}</option>`).join("");
+  }
+
+  // ---------- drawers ----------
+  const overlay = document.getElementById("overlay");
+  const postDrawer = document.getElementById("post-drawer");
+  const payDrawer = document.getElementById("pay-drawer");
+  const authDrawer = document.getElementById("auth-drawer");
+  const applyDrawer = document.getElementById("apply-drawer");
+  const inboxDrawer = document.getElementById("inbox-drawer");
+  const myJobsDrawer = document.getElementById("myjobs-drawer");
+  const jobDetailDrawer = document.getElementById("jobdetail-drawer");
+
+  let lastFocusedBeforeDrawer = null;
+  function openDrawer(drawer){
+    lastFocusedBeforeDrawer = document.activeElement;
+    overlay.classList.add("show");
+    drawer.classList.add("show");
+    const focusable = drawer.querySelector("button, input, textarea, select, [tabindex]");
+    if(focusable) focusable.focus();
+  }
+  function closeDrawers(){
+    overlay.classList.remove("show");
+    applyDrawer.classList.remove("show");
+    postDrawer.classList.remove("show");
+    payDrawer.classList.remove("show");
+    authDrawer.classList.remove("show");
+    inboxDrawer.classList.remove("show");
+    myJobsDrawer.classList.remove("show");
+    jobDetailDrawer.classList.remove("show");
+    if(lastFocusedBeforeDrawer && typeof lastFocusedBeforeDrawer.focus === "function"){
+      lastFocusedBeforeDrawer.focus();
+    }
+    lastFocusedBeforeDrawer = null;
+  }
+  overlay.addEventListener("click", closeDrawers);
+  document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click", closeDrawers));
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape") closeDrawers();
+  });
+
+  document.getElementById("open-post").addEventListener("click", ()=>{
+    if(!currentUser){
+      openDrawer(authDrawer);
+      return;
+    }
+    const notice = document.getElementById("signer-notice");
+    notice.textContent = `Posting as ${shortNpub(currentUser.npub)}.`;
+    notice.classList.add("good");
+    openDrawer(postDrawer);
+  });
+  document.getElementById("scroll-board").addEventListener("click", ()=>{
+    document.getElementById("board-anchor").scrollIntoView({behavior:"smooth"});
+  });
+
+  function openPayDrawer(listing){
+    document.getElementById("pay-title").textContent = listing.title;
+    document.getElementById("pay-amount-line").innerHTML =
+      `<span style="font-size:24px;">${formatPriceLine(listing)}</span>`;
+
+    const methods = (listing.methods && listing.methods.length) ? listing.methods : ["cash"];
+    const tabsEl = document.getElementById("pay-tabs");
+    tabsEl.innerHTML = "";
+    const panels = document.querySelectorAll("#pay-drawer .pay-panel");
+
+    function showPanel(method){
+      panels.forEach(p => p.classList.toggle("active", p.dataset.panel === method));
+      tabsEl.querySelectorAll(".pay-tab").forEach(t => t.classList.toggle("active", t.dataset.method === method));
+    }
+
+    methods.forEach((m,i)=>{
+      const btn = document.createElement("button");
+      btn.className = "pay-tab";
+      btn.dataset.method = m;
+      btn.textContent = METHOD_LABEL[m] || m;
+      btn.addEventListener("click", ()=> showPanel(m));
+      tabsEl.appendChild(btn);
+    });
+
+    showPanel(methods[0]);
+    openDrawer(payDrawer);
+  }
+
+  // ---------- apply drawer ----------
+  function openApplyDrawer(listing){
+    if(!currentUser){
+      openDrawer(authDrawer);
+      return;
+    }
+
+    document.getElementById("apply-job-title").textContent = listing.title;
+    const body = document.getElementById("apply-drawer-body");
+
+    if(!listing.pubkey){
+      body.innerHTML = `<div class="plain-note"><strong>Demo listing.</strong> This is illustrative sample data, not a real posting — there's no poster to apply to.</div>`;
+    } else if(listing.pubkey === currentUser.pubkey){
+      body.innerHTML = `<div class="plain-note"><strong>This is your own listing.</strong> You can't apply to a job you posted yourself.</div>`;
+    } else {
+      const wantsLightning = (listing.methods||[]).includes("lightning");
+      body.innerHTML = `
+        ${renderMediaGallery(listing.media)}
+        <div class="field">
+          <label for="f-apply-message">Message to the poster</label>
+          <textarea id="f-apply-message" placeholder="Introduce yourself, your availability, relevant experience…"></textarea>
+        </div>
+        ${wantsLightning ? `
+        <div class="field">
+          <label for="f-apply-lnaddr">Your Lightning address (so they can pay you)</label>
+          <input id="f-apply-lnaddr" placeholder="you@getalby.com">
+        </div>` : ""}
+        <button class="btn btn-primary" id="send-application" style="width:100%; justify-content:center;">Send application</button>
+        <div class="notice" id="apply-status" style="display:none; margin-top:14px;"></div>
+        <button type="button" class="btn btn-ghost" id="view-payment-methods" style="width:100%; justify-content:center; margin-top:12px; color:var(--ink); border-color:var(--line);">View payment methods</button>
+      `;
+      document.getElementById("send-application").addEventListener("click", ()=> sendApplication(listing));
+      document.getElementById("view-payment-methods").addEventListener("click", ()=>{
+        closeDrawers();
+        openPayDrawer(listing);
+      });
+    }
+
+    openDrawer(applyDrawer);
+  }
+
+  async function sendApplication(listing){
+    const status = document.getElementById("apply-status");
+    const btn = document.getElementById("send-application");
+    const msgEl = document.getElementById("f-apply-message");
+    const lnaddrEl = document.getElementById("f-apply-lnaddr");
+    const message = msgEl.value.trim();
+    const applicantLnaddr = lnaddrEl ? lnaddrEl.value.trim() : "";
+
+    status.style.display = "block";
+    status.classList.remove("good");
+
+    if(!message){
+      status.textContent = "Write a short message before sending.";
+      return;
+    }
+
+    btn.disabled = true;
+    status.textContent = "Sending…";
+
+    const content = `Application for "${listing.title}":\n\n${message}` +
+      (applicantLnaddr ? `\n\nLightning address for payment: ${applicantLnaddr}` : "");
+
+    try{
+      await sendEncryptedDM(listing.pubkey, content, [["e", listing.id]]);
+
+      status.classList.add("good");
+      status.textContent = "Application sent as an encrypted direct message — the poster will see it in any Nostr DM client.";
+      msgEl.value = "";
+
+      myApplications.push({
+        listingId: listing.id,
+        listingTitle: listing.title,
+        posterPubkey: listing.pubkey,
+        sentAt: Math.floor(Date.now()/1000),
+        messages: [{ content, sentAt: Math.floor(Date.now()/1000) }]
+      });
+      saveMyApplications();
+    }catch(e){
+      console.error(e);
+      status.textContent = "Couldn't send the application: " + (e.message || "unknown error");
+    }finally{
+      btn.disabled = false;
+    }
+  }
+
+  // shared by the initial application and any follow-up replies in My Jobs
+  async function sendEncryptedDM(toPubkey, content, extraTags){
+    let encrypted;
+    if(currentUser.method === "nip07"){
+      if(!window.nostr?.nip04?.encrypt){
+        throw new Error("your extension doesn't support encrypted DMs (NIP-04)");
+      }
+      encrypted = await window.nostr.nip04.encrypt(toPubkey, content);
+    } else {
+      encrypted = await nip04.encrypt(currentUser.secretKey, toPubkey, content);
+    }
+    await signAndPublish({ kind:4, tags: [["p", toPubkey], ...extraTags], content: encrypted });
+  }
+
+  // ---------- account / auth ----------
+  const AUTH_STORAGE_KEY = "stakrabbit_auth_v1";
+  let currentUser = null; // { method:"nip07"|"local", pubkey, npub, secretKey?, encrypted? }
+  let lockedAccount = null; // { pubkey, npub, salt, iv, ciphertext } — passphrase-protected key not yet unlocked this page load
+
+  function bytesToHex(bytes){
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  function hexToBytes(hex){
+    const clean = hex.trim();
+    const arr = new Uint8Array(clean.length / 2);
+    for(let i = 0; i < arr.length; i++) arr[i] = parseInt(clean.substr(i * 2, 2), 16);
+    return arr;
+  }
+  function shortNpub(npub){
+    return npub ? npub.slice(0, 10) + "…" + npub.slice(-4) : "";
+  }
+
+  // ---------- local key encryption at rest (Web Crypto: PBKDF2 -> AES-GCM) ----------
+  function bytesToBase64(bytes){
+    let bin = "";
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin);
+  }
+  function base64ToBytes(b64){
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  async function deriveAesKey(passphrase, saltBytes){
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]
+    );
+    return crypto.subtle.deriveKey(
+      { name:"PBKDF2", salt: saltBytes, iterations: 100000, hash:"SHA-256" },
+      keyMaterial,
+      { name:"AES-GCM", length:256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  }
+  async function encryptSecretKey(secretKeyBytes, passphrase){
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveAesKey(passphrase, salt);
+    const ciphertext = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, secretKeyBytes);
+    return {
+      salt: bytesToBase64(salt),
+      iv: bytesToBase64(iv),
+      ciphertext: bytesToBase64(new Uint8Array(ciphertext))
+    };
+  }
+  async function decryptSecretKey(payload, passphrase){
+    const salt = base64ToBytes(payload.salt);
+    const iv = base64ToBytes(payload.iv);
+    const key = await deriveAesKey(passphrase, salt);
+    const plainBuf = await crypto.subtle.decrypt({ name:"AES-GCM", iv }, key, base64ToBytes(payload.ciphertext));
+    return new Uint8Array(plainBuf);
+  }
+
+  function saveSession(){
+    if(!currentUser){ localStorage.removeItem(AUTH_STORAGE_KEY); return; }
+    const payload = { method: currentUser.method, pubkey: currentUser.pubkey };
+    if(currentUser.method === "local"){
+      if(currentUser.encrypted){
+        payload.encrypted = true;
+        payload.salt = currentUser.encrypted.salt;
+        payload.iv = currentUser.encrypted.iv;
+        payload.ciphertext = currentUser.encrypted.ciphertext;
+      } else {
+        payload.secretKeyHex = bytesToHex(currentUser.secretKey);
+      }
+    }
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+  }
+
+  function loadSession(){
+    let raw;
+    try{ raw = localStorage.getItem(AUTH_STORAGE_KEY); }catch(e){ return null; }
+    if(!raw) return null;
+    try{
+      const data = JSON.parse(raw);
+      if(data.method === "local" && data.encrypted){
+        return { locked:true, pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey), salt:data.salt, iv:data.iv, ciphertext:data.ciphertext };
+      }
+      if(data.method === "local" && data.secretKeyHex){
+        const sk = hexToBytes(data.secretKeyHex);
+        const pk = getPublicKey(sk);
+        return { method:"local", secretKey:sk, pubkey:pk, npub: nip19.npubEncode(pk) };
+      }
+      if(data.method === "nip07" && data.pubkey){
+        return { method:"nip07", pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey) };
+      }
+    }catch(e){ /* corrupt session, ignore */ }
+    return null;
+  }
+
+  // applications are tracked locally per-account (this browser only) since there's
+  // no backend — the app never queries relays for our own sent DMs
+  function loadMyApplications(){
+    if(!currentUser) return [];
+    try{
+      const raw = localStorage.getItem("stakrabbit_applications_" + currentUser.pubkey);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+  function saveMyApplications(){
+    if(!currentUser) return;
+    localStorage.setItem("stakrabbit_applications_" + currentUser.pubkey, JSON.stringify(myApplications));
+  }
+
+  function logIn(user){
+    currentUser = user;
+    inboxMessages = [];
+    saveSession();
+    myApplications = loadMyApplications();
+    updateAuthUI();
+    closeDrawers();
+    sockets.forEach(ws=>{ if(ws.readyState === WebSocket.OPEN) sendInboxSubscription(ws); });
+  }
+
+  function logOut(){
+    currentUser = null;
+    inboxMessages = [];
+    myApplications = [];
+    saveSession();
+    updateAuthUI();
+  }
+
+  function updateAuthUI(){
+    const area = document.getElementById("account-area");
+    area.innerHTML = "";
+    if(currentUser){
+      const unreadCount = inboxMessages.filter(m=>!m.read).length;
+      const inboxBtn = document.createElement("button");
+      inboxBtn.className = "account-chip";
+      inboxBtn.textContent = unreadCount ? `✉️ Inbox (${unreadCount} new)` : "✉️ Inbox";
+      inboxBtn.addEventListener("click", ()=>{
+        renderInbox();
+        openDrawer(inboxDrawer);
+        markMessagesRead(inboxMessages);
+      });
+      area.appendChild(inboxBtn);
+
+      const myJobsBtn = document.createElement("button");
+      myJobsBtn.className = "account-chip";
+      myJobsBtn.textContent = "🗂️ My jobs";
+      myJobsBtn.addEventListener("click", ()=>{ renderMyJobs(); openDrawer(myJobsDrawer); });
+      area.appendChild(myJobsBtn);
+
+      const chip = document.createElement("div");
+      chip.className = "account-chip";
+      chip.innerHTML = `👤 ${shortNpub(currentUser.npub)} <button type="button" class="logout-x" id="logout-btn">Log out</button>`;
+      area.appendChild(chip);
+      document.getElementById("logout-btn").addEventListener("click", (e)=>{
+        e.stopPropagation();
+        logOut();
+      });
+    } else if(lockedAccount){
+      const btn = document.createElement("button");
+      btn.className = "account-chip";
+      btn.textContent = `🔒 ${shortNpub(lockedAccount.npub)} · Unlock`;
+      btn.addEventListener("click", openUnlockPrompt);
+      area.appendChild(btn);
+    } else {
+      const btn = document.createElement("button");
+      btn.className = "account-chip";
+      btn.textContent = "Log in";
+      btn.addEventListener("click", ()=>{
+        document.getElementById("auth-tabs").style.display = "";
+        document.querySelectorAll(".auth-tab").forEach(t=>t.classList.toggle("active", t.dataset.auth==="extension"));
+        document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel==="extension"));
+        openDrawer(authDrawer);
+      });
+      area.appendChild(btn);
+    }
+  }
+
+  function openUnlockPrompt(){
+    document.getElementById("auth-tabs").style.display = "none";
+    document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel==="unlock"));
+    document.getElementById("f-unlock-passphrase").value = "";
+    document.getElementById("auth-unlock-status").style.display = "none";
+    openDrawer(authDrawer);
+  }
+
+  // -- extension login --
+  document.getElementById("auth-connect-extension").addEventListener("click", async ()=>{
+    const status = document.getElementById("auth-extension-status");
+    status.style.display = "block";
+    status.classList.remove("good");
+    if(!window.nostr || typeof window.nostr.getPublicKey !== "function"){
+      status.textContent = "No Nostr extension detected. Install one (e.g. Alby, nos2x) and reload, or use Create account / I have a key instead.";
+      return;
+    }
+    try{
+      const pubkey = await window.nostr.getPublicKey();
+      logIn({ method:"nip07", pubkey, npub: nip19.npubEncode(pubkey) });
+    }catch(e){
+      status.textContent = "Couldn't connect — the extension request was cancelled or denied.";
+    }
+  });
+
+  // -- create account --
+  let pendingNewKey = null;
+  document.getElementById("auth-generate-key").addEventListener("click", ()=>{
+    const sk = generateSecretKey();
+    pendingNewKey = { secretKey: sk, pubkey: getPublicKey(sk) };
+    document.getElementById("new-nsec").textContent = nip19.nsecEncode(sk);
+    document.getElementById("create-step-1").style.display = "none";
+    document.getElementById("create-step-2").style.display = "block";
+  });
+  document.getElementById("copy-nsec").addEventListener("click", ()=>{
+    const txt = document.getElementById("new-nsec").textContent;
+    navigator.clipboard?.writeText(txt).then(()=>{
+      const btn = document.getElementById("copy-nsec");
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(()=> btn.textContent = old, 1400);
+    }).catch(()=>{});
+  });
+  document.getElementById("confirm-saved-key").addEventListener("change", (e)=>{
+    document.getElementById("auth-finish-create").disabled = !e.target.checked;
+  });
+  document.getElementById("auth-finish-create").addEventListener("click", async ()=>{
+    if(!pendingNewKey) return;
+    const passphrase = document.getElementById("f-create-passphrase").value;
+    const user = { method:"local", secretKey: pendingNewKey.secretKey, pubkey: pendingNewKey.pubkey, npub: nip19.npubEncode(pendingNewKey.pubkey) };
+    if(passphrase) user.encrypted = await encryptSecretKey(pendingNewKey.secretKey, passphrase);
+    logIn(user);
+    pendingNewKey = null;
+    document.getElementById("create-step-1").style.display = "block";
+    document.getElementById("create-step-2").style.display = "none";
+    document.getElementById("confirm-saved-key").checked = false;
+    document.getElementById("auth-finish-create").disabled = true;
+    document.getElementById("f-create-passphrase").value = "";
+  });
+
+  // -- import existing key --
+  document.getElementById("auth-import-key").addEventListener("click", async ()=>{
+    const status = document.getElementById("auth-import-status");
+    status.style.display = "block";
+    status.classList.remove("good");
+    const raw = document.getElementById("f-import-key").value.trim();
+    const passphrase = document.getElementById("f-import-passphrase").value;
+    let sk;
+    try{
+      if(raw.startsWith("nsec1")){
+        const decoded = nip19.decode(raw);
+        if(decoded.type !== "nsec") throw new Error("wrong key type");
+        sk = decoded.data;
+      } else if(/^[0-9a-fA-F]{64}$/.test(raw)){
+        sk = hexToBytes(raw);
+      } else {
+        throw new Error("unrecognised format");
+      }
+      const pubkey = getPublicKey(sk);
+      const user = { method:"local", secretKey: sk, pubkey, npub: nip19.npubEncode(pubkey) };
+      if(passphrase) user.encrypted = await encryptSecretKey(sk, passphrase);
+      logIn(user);
+      document.getElementById("f-import-key").value = "";
+      document.getElementById("f-import-passphrase").value = "";
+    }catch(e){
+      status.textContent = "That doesn't look like a valid private key — use an nsec1… key or a 64-character hex key.";
+    }
+  });
+
+  // -- unlock a passphrase-protected local key --
+  document.getElementById("auth-unlock").addEventListener("click", async ()=>{
+    const status = document.getElementById("auth-unlock-status");
+    status.style.display = "block";
+    status.classList.remove("good");
+    const passphrase = document.getElementById("f-unlock-passphrase").value;
+    if(!lockedAccount) return;
+    if(!passphrase){ status.textContent = "Enter your passphrase."; return; }
+    try{
+      const sk = await decryptSecretKey(lockedAccount, passphrase);
+      const pubkey = getPublicKey(sk);
+      if(pubkey !== lockedAccount.pubkey) throw new Error("mismatch");
+      const encrypted = { salt: lockedAccount.salt, iv: lockedAccount.iv, ciphertext: lockedAccount.ciphertext };
+      const npub = lockedAccount.npub;
+      lockedAccount = null;
+      logIn({ method:"local", secretKey: sk, pubkey, npub, encrypted });
+    }catch(e){
+      status.textContent = "Wrong passphrase, or this key can't be decrypted.";
+    }
+  });
+  document.getElementById("auth-unlock-forget").addEventListener("click", ()=>{
+    lockedAccount = null;
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    document.getElementById("auth-tabs").style.display = "";
+    document.querySelectorAll(".auth-tab").forEach(t=>t.classList.toggle("active", t.dataset.auth==="extension"));
+    document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel==="extension"));
+    updateAuthUI();
+  });
+
+  // -- auth drawer tabs --
+  document.querySelectorAll(".auth-tab").forEach(tab=>{
+    tab.addEventListener("click", ()=>{
+      document.querySelectorAll(".auth-tab").forEach(t=>t.classList.toggle("active", t===tab));
+      document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel===tab.dataset.auth));
+    });
+  });
+
+  // ---------- payment method checkboxes ----------
+  const mLightning = document.getElementById("m-lightning");
+  const mCash = document.getElementById("m-cash");
+  const mBank = document.getElementById("m-bank");
+
+  // ---------- post form: media picker ----------
+  let pendingMediaFiles = [];
+  function renderPendingMediaPreview(containerId, files, onRemove){
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    if(!files.length){ el.innerHTML = ""; return; }
+    el.innerHTML = files.map((f,i)=>{
+      const kind = mediaKind(f.type);
+      const url = URL.createObjectURL(f);
+      let inner;
+      if(kind === "image") inner = `<img src="${url}" alt="">`;
+      else if(kind === "video") inner = `<video src="${url}" muted></video>`;
+      else inner = `<div class="media-file-note">${kind==="audio" ? "🎵 " : "📎 "}${escapeHtml(f.name)}</div>`;
+      return `<div class="media-thumb" data-idx="${i}">${inner}<button type="button" class="media-remove-btn" data-idx="${i}">✕</button></div>`;
+    }).join("");
+    el.querySelectorAll(".media-remove-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=> onRemove(parseInt(btn.dataset.idx, 10)));
+    });
+  }
+
+  function refreshPostMediaPreview(){
+    renderPendingMediaPreview("f-media-preview", pendingMediaFiles, (idx)=>{
+      pendingMediaFiles.splice(idx, 1);
+      refreshPostMediaPreview();
+    });
+  }
+  document.getElementById("f-media").addEventListener("change", (e)=>{
+    pendingMediaFiles = Array.from(e.target.files || []);
+    refreshPostMediaPreview();
+  });
+
+  // ---------- post form ----------
+  document.getElementById("post-form").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    if(!currentUser){
+      alert("You need to be logged in to post a job.");
+      openDrawer(authDrawer);
+      return;
+    }
+    const title = document.getElementById("f-title").value.trim();
+    const category = document.getElementById("f-category").value;
+    const location = document.getElementById("f-location").value.trim();
+    const desc = document.getElementById("f-desc").value.trim();
+
+    const methods = [];
+    if(mLightning.checked) methods.push("lightning");
+    if(mCash.checked) methods.push("cash");
+    if(mBank.checked) methods.push("bank");
+    if(methods.length === 0){
+      setLocateStatus(""); // no-op, just avoid stale message
+      alert("Pick at least one payment method.");
+      return;
+    }
+
+    const gbpVal = parseInt(document.getElementById("f-price-gbp").value, 10);
+    const price = {};
+    if(gbpVal) price.gbp = gbpVal;
+    if(!price.gbp){
+      alert("Enter a price in £.");
+      return;
+    }
+
+    const dtag = "local-" + Date.now();
+    const newListing = {
+      id: currentUser.pubkey + ":" + dtag, dtag,
+      title, category, location, price, methods, desc,
+      demo:false, lat:null, lon:null, pubkey: currentUser.pubkey,
+      status: "active", created_at: Math.floor(Date.now()/1000)
+    };
+
+    try{
+      const geo = await geocode(location + ", UK");
+      newListing.lat = geo.lat;
+      newListing.lon = geo.lon;
+    }catch(e){ /* posting still works without coordinates, just excluded from distance sort */ }
+
+    const submitBtn = document.getElementById("post-submit-btn");
+    const filesToUpload = pendingMediaFiles;
+    if(filesToUpload.length){
+      submitBtn.disabled = true;
+      try{
+        newListing.media = await uploadAllMedia(filesToUpload, (i, total)=>{
+          submitBtn.textContent = `Uploading ${i+1}/${total}…`;
+        });
+      }catch(err){
+        console.error(err);
+        alert("Couldn't upload media: " + (err.message || "unknown error") + ". Posting the job without it.");
+        newListing.media = [];
+      }
+      submitBtn.textContent = "Post job";
+      submitBtn.disabled = false;
+    }
+
+    try{
+      await publishToNostr(newListing);
+    }catch(err){
+      console.error(err);
+      alert("Couldn't publish to the Nostr network, but your listing was still added to the board in this browser.");
+    }
+
+    listings.unshift(newListing);
+    renderFilters();
+    renderGrid();
+    closeDrawers();
+    e.target.reset();
+    pendingMediaFiles = [];
+    document.getElementById("f-media-preview").innerHTML = "";
+  });
+
+  function buildListingTags(listing, status){
+    const priceTags = [];
+    if(listing.price && listing.price.gbp) priceTags.push(["price", String(listing.price.gbp), "GBP"]);
+    if(listing.price && listing.price.sats) priceTags.push(["price", String(listing.price.sats), "sats"]);
+    const methodTags = (listing.methods||[]).map(m => ["method", m]);
+    // NIP-92: one imeta tag per attached photo/audio/video, pointing at wherever it was uploaded
+    const mediaTags = (listing.media||[]).map(m => ["imeta", "url " + m.url, "m " + (m.type || "")]);
+
+    return [
+      ["d", listing.dtag || listing.id],
+      ["title", listing.title],
+      ["summary", listing.desc.slice(0,140)],
+      ["location", listing.location],
+      ...priceTags,
+      ...methodTags,
+      ...mediaTags,
+      ["t", FEED_TAG],
+      ["t", listing.category],
+      ["status", status],
+      ...(listing.lat!=null ? [["lat", String(listing.lat)]] : []),
+      ...(listing.lon!=null ? [["lon", String(listing.lon)]] : [])
+    ];
+  }
+
+  // signs an {kind, tags, content} template with whichever identity is logged in
+  // (extension or local key) and broadcasts it to every connected relay
+  // signs an {kind, tags, content} template with whichever identity is logged in, without
+  // publishing it anywhere — used both for relay events (signAndPublish) and for one-off
+  // signed tokens like the Blossom upload auth header, which are never broadcast
+  async function signNostrEvent(template){
+    if(!currentUser) throw new Error("not logged in");
+
+    if(currentUser.method === "nip07"){
+      if(!window.nostr || typeof window.nostr.signEvent !== "function"){
+        throw new Error("extension no longer available");
+      }
+      const pubkey = await window.nostr.getPublicKey();
+      return await window.nostr.signEvent({
+        kind: template.kind,
+        created_at: Math.floor(Date.now()/1000),
+        pubkey,
+        tags: template.tags,
+        content: template.content
+      });
+    }
+    return finalizeEvent({
+      kind: template.kind,
+      created_at: Math.floor(Date.now()/1000),
+      tags: template.tags,
+      content: template.content
+    }, currentUser.secretKey);
+  }
+
+  async function signAndPublish(template){
+    const signed = await signNostrEvent(template);
+
+    const openSockets = sockets.filter(ws => ws.readyState === WebSocket.OPEN);
+    if(openSockets.length === 0){
+      throw new Error("not connected to any relays");
+    }
+    openSockets.forEach(ws => ws.send(JSON.stringify(["EVENT", signed])));
+
+    const accepted = await waitForPublishConfirmation(signed.id, openSockets.length);
+    if(!accepted){
+      throw new Error("no relay accepted the event");
+    }
+    return signed;
+  }
+
+  // NIP-20: relays reply ["OK", eventId, true|false, message] after an EVENT publish.
+  // Without this we'd have no way to tell a real publish from one a relay silently dropped.
+  const pendingPublishes = {};
+  function waitForPublishConfirmation(eventId, relayCount){
+    return new Promise(resolve=>{
+      const entry = { acked: 0, accepted: false, relayCount, resolve };
+      entry.timer = setTimeout(()=>{
+        delete pendingPublishes[eventId];
+        resolve(entry.accepted);
+      }, 5000);
+      pendingPublishes[eventId] = entry;
+    });
+  }
+  function handlePublishAck(eventId, ok){
+    const entry = pendingPublishes[eventId];
+    if(!entry) return;
+    entry.acked++;
+    if(ok) entry.accepted = true;
+    if(entry.accepted || entry.acked >= entry.relayCount){
+      clearTimeout(entry.timer);
+      delete pendingPublishes[eventId];
+      entry.resolve(entry.accepted);
+    }
+  }
+
+  // ---------- media uploads (Blossom protocol: BUD-01/02 upload, BUD-11 auth) ----------
+  // Nostr events are size-limited well below what a photo/clip needs, so media is uploaded
+  // to a separate file host and only its URL is attached to the listing event.
+  const BLOSSOM_SERVER = "https://blossom.band";
+
+  function base64UrlEncode(bytes){
+    return bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  async function sha256Hex(buf){
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+
+  // BUD-11: a signed kind:24242 event, never published to relays, used only as an HTTP
+  // Authorization header proving to the file host that this upload is really from this pubkey
+  async function createBlossomAuthToken(verb, sha256HashHex){
+    const tags = [
+      ["t", verb],
+      ["expiration", String(Math.floor(Date.now()/1000) + 300)]
+    ];
+    if(sha256HashHex) tags.push(["x", sha256HashHex]);
+    const signed = await signNostrEvent({ kind:24242, tags, content: "stakrabbit: " + verb });
+    return base64UrlEncode(new TextEncoder().encode(JSON.stringify(signed)));
+  }
+
+  async function uploadToBlossom(file){
+    const buf = await file.arrayBuffer();
+    const hash = await sha256Hex(buf);
+    const token = await createBlossomAuthToken("upload", hash);
+    const res = await fetch(BLOSSOM_SERVER + "/upload", {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "Authorization": "Nostr " + token
+      },
+      body: buf
+    });
+    if(!res.ok){
+      const reason = res.headers.get("X-Reason") || (await res.text().catch(()=>"")) || res.statusText;
+      throw new Error(`upload of "${file.name}" failed (${res.status}): ${reason}`);
+    }
+    const descriptor = await res.json();
+    return { url: descriptor.url, type: descriptor.type || file.type || "" };
+  }
+
+  async function uploadAllMedia(files, onProgress){
+    const results = [];
+    for(let i = 0; i < files.length; i++){
+      if(onProgress) onProgress(i, files.length);
+      results.push(await uploadToBlossom(files[i]));
+    }
+    return results;
+  }
+
+  function mediaKind(mimeOrUrl){
+    const s = (mimeOrUrl || "").toLowerCase();
+    if(s.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif)(\?|$)/.test(s)) return "image";
+    if(s.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|opus|flac)(\?|$)/.test(s)) return "audio";
+    if(s.startsWith("video/") || /\.(mp4|webm|mov|mkv)(\?|$)/.test(s)) return "video";
+    return "file";
+  }
+
+  // renders an inline gallery for a listing's attached media; url scheme is restricted to
+  // http(s) so a malicious relay event can't smuggle a javascript:/data: URL into an <a href>
+  function renderMediaGallery(media){
+    const safe = (media || []).filter(m => m && m.url && /^https?:\/\//i.test(m.url));
+    if(!safe.length) return "";
+    return `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">${safe.map(m=>{
+      const kind = mediaKind(m.type || m.url);
+      const url = escapeHtml(m.url);
+      if(kind === "image") return `<img src="${url}" alt="" loading="lazy" style="width:110px; height:90px; object-fit:cover; border-radius:10px; border:1px solid var(--line);">`;
+      if(kind === "video") return `<video src="${url}" controls style="width:190px; height:110px; border-radius:10px; border:1px solid var(--line);"></video>`;
+      if(kind === "audio") return `<audio src="${url}" controls style="width:100%; max-width:280px;"></audio>`;
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="hero-tag" style="color:var(--ink);">📎 attachment</a>`;
+    }).join("")}</div>`;
+  }
+
+  async function publishToNostr(listing){
+    await signAndPublish({ kind:30402, tags: buildListingTags(listing, "active"), content: listing.desc });
+  }
+
+  // republishes the same addressable (d-tag) listing with status:inactive, which
+  // relays treat as a replacement — this is how a poster closes their own listing
+  async function closeListing(listing){
+    await signAndPublish({ kind:30402, tags: buildListingTags(listing, "inactive"), content: listing.desc });
+  }
+
+  async function handleCloseListing(listing){
+    try{
+      await closeListing(listing);
+    }catch(e){
+      console.error(e);
+    }
+    // stays in `listings` (so it can still show, as Closed, in My Jobs) — just
+    // hidden from the public board/map by the status filter in computeVisibleItems
+    listing.status = "inactive";
+    renderFilters();
+    renderGrid();
+    renderMyJobs();
+  }
+
+  // ---------- relay connections (read-only feed of live NIP-99 kind:30402 events tagged satrabbit) ----------
+  function updateRelayStatus(){
+    const dot = document.getElementById("relay-dot");
+    const text = document.getElementById("relay-text");
+    if(connectedCount === 0){
+      dot.className = "dot off";
+      text.textContent = "Offline — showing demo board only";
+    } else {
+      dot.className = "dot live";
+      text.textContent = `Live · connected`;
+    }
+  }
+
+  function connectRelays(){
+    RELAYS.forEach(url=>{
+      let ws;
+      try{ ws = new WebSocket(url); } catch(e){ return; }
+      sockets.push(ws);
+
+      ws.addEventListener("open", ()=>{
+        connectedCount++;
+        updateRelayStatus();
+        const sub = ["REQ", "satrabbit-feed", { kinds:[30402], "#t":[FEED_TAG], limit:50 }];
+        ws.send(JSON.stringify(sub));
+        sendInboxSubscription(ws);
+      });
+
+      ws.addEventListener("message", (msg)=>{
+        try{
+          const data = JSON.parse(msg.data);
+          if(data[0] === "EVENT" && data[2]){
+            const evt = data[2];
+            if(evt.kind === 30402){
+              const listing = eventToListing(evt);
+              if(listing){
+                // kind:30402 is addressable — relays may deliver an older and newer version of the
+                // same (pubkey, d-tag) listing in either order, so track the latest created_at we've
+                // seen per id independent of whether that listing is currently in `listings` (an
+                // "inactive" listing stays in the array, just hidden from the public board — see
+                // computeVisibleItems — so a late-arriving stale "active" event can't resurrect it)
+                const seenAt = listingLastSeenAt[listing.id];
+                const isStale = seenAt != null && listing.created_at != null && listing.created_at < seenAt;
+                if(!isStale){
+                  if(listing.created_at != null) listingLastSeenAt[listing.id] = listing.created_at;
+                  const idx = listings.findIndex(l=>l.id===listing.id);
+                  if(idx !== -1){
+                    listings[idx] = listing;
+                  } else {
+                    listings.push(listing);
+                  }
+                  renderFilters();
+                  renderGrid();
+                  // this fires on every listing event from anyone on the tag, so skip rebuilding
+                  // My Jobs' full innerHTML while it's not even visible — its own open-drawer
+                  // handler already renders fresh content the moment it's opened
+                  if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+                }
+              }
+            } else if(evt.kind === 4){
+              handleIncomingDM(evt);
+            }
+          } else if(data[0] === "OK" && data[1]){
+            handlePublishAck(data[1], !!data[2]);
+          }
+        }catch(e){ /* ignore malformed */ }
+      });
+
+      ws.addEventListener("close", ()=>{
+        connectedCount = Math.max(0, connectedCount-1);
+        updateRelayStatus();
+      });
+      ws.addEventListener("error", ()=>{ /* handled by close */ });
+    });
+
+    // fallback: if nothing connects within 6s, make sure status reflects that
+    setTimeout(updateRelayStatus, 6000);
+  }
+
+  // ---------- inbox (encrypted DM replies to applications) ----------
+  function sendInboxSubscription(ws){
+    if(!currentUser) return;
+    const sub = ["REQ", "satrabbit-inbox", { kinds:[4], "#p":[currentUser.pubkey], limit:100 }];
+    ws.send(JSON.stringify(sub));
+  }
+
+  async function handleIncomingDM(evt){
+    if(!currentUser || evt.pubkey === currentUser.pubkey) return;
+    if(inboxMessages.find(m=>m.id===evt.id)) return;
+
+    try{
+      let plaintext;
+      if(currentUser.method === "nip07"){
+        if(!window.nostr?.nip04?.decrypt) return;
+        plaintext = await window.nostr.nip04.decrypt(evt.pubkey, evt.content);
+      } else {
+        plaintext = await nip04.decrypt(currentUser.secretKey, evt.pubkey, evt.content);
+      }
+
+      inboxMessages.push({
+        id: evt.id,
+        from: evt.pubkey,
+        content: plaintext,
+        created_at: evt.created_at,
+        listingId: tagVal(evt.tags || [], "e"),
+        read: false
+      });
+      inboxMessages.sort((a,b)=> b.created_at - a.created_at);
+      updateAuthUI();
+      if(inboxDrawer.classList.contains("show")) renderInbox();
+      if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+    }catch(e){ /* not decryptable with our key, or malformed — ignore */ }
+  }
+
+  function markMessagesRead(messages){
+    let changed = false;
+    messages.forEach(m=>{ if(!m.read){ m.read = true; changed = true; } });
+    if(changed) updateAuthUI();
+  }
+
+  function formatRelativeTime(unixSeconds){
+    const mins = Math.floor((Date.now() - unixSeconds*1000) / 60000);
+    if(mins < 1) return "just now";
+    if(mins < 60) return mins + "m ago";
+    const hours = Math.floor(mins/60);
+    if(hours < 24) return hours + "h ago";
+    return Math.floor(hours/24) + "d ago";
+  }
+
+  function renderInbox(){
+    const list = document.getElementById("inbox-list");
+    if(!list) return;
+    if(inboxMessages.length === 0){
+      list.innerHTML = `<div class="plain-note">No messages yet. Applications sent to your listings will show up here.</div>`;
+      return;
+    }
+    list.innerHTML = inboxMessages.map(m=>{
+      const listing = listings.find(l=>l.id===m.listingId);
+      const npub = nip19.npubEncode(m.from);
+      return `
+        <div class="inbox-item${m.read ? "" : " unread"}">
+          <div class="inbox-meta">
+            <span>${shortNpub(npub)}${listing ? " · " + escapeHtml(listing.title) : ""}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${formatRelativeTime(m.created_at)}</span>
+          </div>
+          <div class="inbox-body">${escapeHtml(m.content)}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // ---------- my jobs (posted + applied) ----------
+  function renderMyJobs(){
+    renderMyJobsPosted();
+    renderMyJobsApplied();
+  }
+
+  function renderMyJobsPosted(){
+    const el = document.getElementById("myjobs-posted");
+    if(!el || !currentUser) return;
+    const mine = listings.filter(l=>l.pubkey === currentUser.pubkey);
+    if(mine.length === 0){
+      el.innerHTML = `<div class="plain-note">You haven't posted any jobs yet.</div>`;
+      return;
+    }
+    // one pass over inboxMessages grouped by listing, instead of re-filtering it for every row
+    const messagesByListing = {};
+    inboxMessages.forEach(m=>{
+      if(!m.listingId) return;
+      (messagesByListing[m.listingId] = messagesByListing[m.listingId] || []).push(m);
+    });
+    el.innerHTML = mine.map(l=>{
+      const applications = messagesByListing[l.id] || [];
+      const unread = applications.filter(m=>!m.read).length;
+      const closed = l.status === "inactive";
+      return `
+        <div class="inbox-item${unread ? " unread" : ""}" style="cursor:pointer;" data-listing-id="${l.id}">
+          <div class="inbox-meta">
+            <span>${escapeHtml(l.title)}${unread ? '<span class="unread-dot"></span>' : ""}</span>
+            <span>${closed ? "Closed" : "Active"}</span>
+          </div>
+          <div class="inbox-body">${formatPriceLine(l)} · ${catLabel(l.category)}${applications.length ? ` · ${applications.length} application${applications.length===1?"":"s"}` : " · No applications yet"}</div>
+        </div>
+      `;
+    }).join("");
+    el.querySelectorAll("[data-listing-id]").forEach(row=>{
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      const activate = ()=>{
+        const listing = listings.find(l=>l.id===row.dataset.listingId);
+        if(listing) openJobDetail("posted", listing);
+      };
+      row.addEventListener("click", activate);
+      row.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); activate(); } });
+    });
+  }
+
+  function renderMyJobsApplied(){
+    const el = document.getElementById("myjobs-applied");
+    if(!el || !currentUser) return;
+    if(myApplications.length === 0){
+      el.innerHTML = `<div class="plain-note">You haven't applied to any jobs yet.</div>`;
+      return;
+    }
+    const total = myApplications.length;
+    el.innerHTML = [...myApplications].reverse().map((a, revIdx)=>{
+      const idx = total - 1 - revIdx;
+      const replies = inboxMessages.filter(m=>m.listingId===a.listingId && m.from===a.posterPubkey);
+      const unread = replies.filter(m=>!m.read).length;
+      const latest = replies[0];
+      return `
+        <div class="inbox-item${unread ? " unread" : ""}" style="cursor:pointer;" data-app-idx="${idx}">
+          <div class="inbox-meta">
+            <span>${escapeHtml(a.listingTitle)}${unread ? '<span class="unread-dot"></span>' : ""}</span>
+            <span>${formatRelativeTime(a.sentAt)}</span>
+          </div>
+          <div class="inbox-body">
+            ${replies.length ? `${replies.length} repl${replies.length===1?"y":"ies"}` : "Awaiting reply"}
+            ${latest ? `<br><span style="color:var(--ink-soft); font-size:12px;">${escapeHtml(latest.content.slice(0,120))}${latest.content.length>120?"…":""}</span>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+    el.querySelectorAll("[data-app-idx]").forEach(row=>{
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      const activate = ()=>{
+        const app = myApplications[parseInt(row.dataset.appIdx, 10)];
+        if(app) openJobDetail("applied", app);
+      };
+      row.addEventListener("click", activate);
+      row.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); activate(); } });
+    });
+  }
+
+  // ---------- job detail (view/edit posted, thread for applied) ----------
+  function openJobDetail(mode, item){
+    if(mode === "posted") renderJobDetailPostedView(item);
+    else renderJobDetailAppliedView(item);
+    openDrawer(jobDetailDrawer);
+  }
+
+  function renderJobDetailPostedView(listing){
+    document.getElementById("jobdetail-title").textContent = listing.title;
+    const body = document.getElementById("jobdetail-body");
+    const applications = inboxMessages.filter(m=>m.listingId===listing.id);
+    const closed = listing.status === "inactive";
+
+    body.innerHTML = `
+      ${renderMediaGallery(listing.media)}
+      <div class="plain-note" style="margin-bottom:16px;">
+        <strong>${escapeHtml(listing.title)}</strong> · ${closed ? "Closed" : "Active"}<br>
+        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}<br>
+        ${(listing.methods||[]).map(m=>METHOD_LABEL[m]||m).join(", ")}<br><br>
+        ${escapeHtml(listing.desc)}
+      </div>
+      <div style="display:flex; gap:10px; margin-bottom:24px;">
+        <button class="btn btn-primary" id="jd-edit-btn" style="flex:1; justify-content:center;">Edit</button>
+        ${!closed ? `<button type="button" class="btn btn-ghost" id="jd-close-btn" style="flex:1; justify-content:center; color:var(--ink); border-color:var(--line);">Close listing</button>` : ""}
+      </div>
+      <div class="section-label" style="border:none;">Applications (${applications.length})</div>
+      <div id="jd-applications"></div>
+    `;
+
+    const appsEl = document.getElementById("jd-applications");
+    if(applications.length === 0){
+      appsEl.innerHTML = `<div class="plain-note">No applications yet.</div>`;
+    } else {
+      appsEl.innerHTML = applications.map(m=>`
+        <div class="inbox-item${m.read ? "" : " unread"}">
+          <div class="inbox-meta">
+            <span>${shortNpub(nip19.npubEncode(m.from))}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${formatRelativeTime(m.created_at)}</span>
+          </div>
+          <div class="inbox-body">${escapeHtml(m.content)}</div>
+        </div>
+      `).join("");
+    }
+    markMessagesRead(applications);
+    renderMyJobsPosted();
+
+    document.getElementById("jd-edit-btn").addEventListener("click", ()=> renderJobDetailEditView(listing));
+    const closeBtn = document.getElementById("jd-close-btn");
+    if(closeBtn){
+      wireConfirmButton(closeBtn, "Confirm close?", async ()=>{
+        closeBtn.disabled = true;
+        await handleCloseListing(listing);
+        renderJobDetailPostedView(listing);
+      });
+    }
+  }
+
+  function renderExistingMediaPreview(containerId, mediaArr, onRemove){
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    if(!mediaArr.length){
+      el.innerHTML = `<div class="plain-note" style="font-size:12px;">No media on this listing yet.</div>`;
+      return;
+    }
+    el.innerHTML = mediaArr.map((m,i)=>{
+      const kind = mediaKind(m.type || m.url);
+      const url = escapeHtml(m.url);
+      let inner;
+      if(kind === "image") inner = `<img src="${url}" alt="">`;
+      else if(kind === "video") inner = `<video src="${url}" muted></video>`;
+      else inner = `<div class="media-file-note">${kind==="audio" ? "🎵 audio" : "📎 file"}</div>`;
+      return `<div class="media-thumb" data-idx="${i}">${inner}<button type="button" class="media-remove-btn" data-idx="${i}">✕</button></div>`;
+    }).join("");
+    el.querySelectorAll(".media-remove-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=> onRemove(parseInt(btn.dataset.idx, 10)));
+    });
+  }
+
+  function renderJobDetailEditView(listing){
+    const body = document.getElementById("jobdetail-body");
+    let editingMedia = [...(listing.media||[])];
+    let newMediaFiles = [];
+
+    body.innerHTML = `
+      <div class="field">
+        <label for="jd-title">Job title</label>
+        <input id="jd-title" value="${escapeHtml(listing.title)}">
+      </div>
+      <div class="field">
+        <label for="jd-category">Category</label>
+        <select id="jd-category">${CATEGORIES.map(c=>`<option value="${c.slug}" ${c.slug===listing.category?"selected":""}>${c.label}</option>`).join("")}</select>
+      </div>
+      <div class="field">
+        <label for="jd-location">Location (town / village)</label>
+        <input id="jd-location" value="${escapeHtml(listing.location)}">
+      </div>
+      <div class="field">
+        <label>Accepted payment methods</label>
+        <div class="method-row">
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="jd-m-lightning" style="margin-right:5px;" ${(listing.methods||[]).includes("lightning")?"checked":""}>Lightning</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="jd-m-cash" style="margin-right:5px;" ${(listing.methods||[]).includes("cash")?"checked":""}>Cash</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="checkbox" id="jd-m-bank" style="margin-right:5px;" ${(listing.methods||[]).includes("bank")?"checked":""}>Bank transfer</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="jd-price">Price in £</label>
+        <input id="jd-price" type="number" min="1" value="${(listing.price && listing.price.gbp) || ""}">
+      </div>
+      <div class="field">
+        <label for="jd-desc">Description</label>
+        <textarea id="jd-desc">${escapeHtml(listing.desc)}</textarea>
+      </div>
+      <div class="field">
+        <label>Existing media</label>
+        <div id="jd-existing-media"></div>
+      </div>
+      <div class="field">
+        <label for="jd-media">Add more photos, audio, or video</label>
+        <input id="jd-media" type="file" accept="image/*,audio/*,video/*" multiple>
+        <div id="jd-media-preview" style="margin-top:10px;"></div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" id="jd-save-btn" style="flex:1; justify-content:center;">Save changes</button>
+        <button type="button" class="btn btn-ghost" id="jd-cancel-btn" style="flex:1; justify-content:center; color:var(--ink); border-color:var(--line);">Cancel</button>
+      </div>
+      <div class="notice" id="jd-edit-status" style="display:none; margin-top:14px;"></div>
+    `;
+
+    function refreshExisting(){
+      renderExistingMediaPreview("jd-existing-media", editingMedia, (idx)=>{
+        editingMedia.splice(idx, 1);
+        refreshExisting();
+      });
+    }
+    refreshExisting();
+
+    function refreshNewMedia(){
+      renderPendingMediaPreview("jd-media-preview", newMediaFiles, (idx)=>{
+        newMediaFiles.splice(idx, 1);
+        refreshNewMedia();
+      });
+    }
+    document.getElementById("jd-media").addEventListener("change", (e)=>{
+      newMediaFiles = Array.from(e.target.files || []);
+      refreshNewMedia();
+    });
+
+    document.getElementById("jd-cancel-btn").addEventListener("click", ()=> renderJobDetailPostedView(listing));
+    document.getElementById("jd-save-btn").addEventListener("click", async ()=>{
+      const statusEl = document.getElementById("jd-edit-status");
+      const saveBtn = document.getElementById("jd-save-btn");
+      statusEl.style.display = "block";
+      statusEl.classList.remove("good");
+
+      const title = document.getElementById("jd-title").value.trim();
+      const category = document.getElementById("jd-category").value;
+      const location = document.getElementById("jd-location").value.trim();
+      const desc = document.getElementById("jd-desc").value.trim();
+      const methods = [];
+      if(document.getElementById("jd-m-lightning").checked) methods.push("lightning");
+      if(document.getElementById("jd-m-cash").checked) methods.push("cash");
+      if(document.getElementById("jd-m-bank").checked) methods.push("bank");
+      const gbpVal = parseInt(document.getElementById("jd-price").value, 10);
+
+      if(!title || !location || !desc || methods.length === 0 || !gbpVal){
+        statusEl.textContent = "Fill in all fields and pick at least one payment method.";
+        return;
+      }
+
+      if(newMediaFiles.length){
+        saveBtn.disabled = true;
+        try{
+          const uploaded = await uploadAllMedia(newMediaFiles, (i, total)=>{
+            saveBtn.textContent = `Uploading ${i+1}/${total}…`;
+          });
+          editingMedia = editingMedia.concat(uploaded);
+        }catch(err){
+          console.error(err);
+          statusEl.textContent = "Couldn't upload new media: " + (err.message || "unknown error");
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save changes";
+          return;
+        }
+        saveBtn.textContent = "Save changes";
+        saveBtn.disabled = false;
+      }
+
+      listing.title = title;
+      listing.category = category;
+      listing.location = location;
+      listing.desc = desc;
+      listing.methods = methods;
+      listing.price = { gbp: gbpVal };
+      listing.media = editingMedia;
+
+      try{
+        await signAndPublish({ kind:30402, tags: buildListingTags(listing, listing.status || "active"), content: listing.desc });
+        renderFilters();
+        renderGrid();
+        renderMyJobs();
+        renderJobDetailPostedView(listing);
+      }catch(e){
+        console.error(e);
+        statusEl.textContent = "Couldn't publish the update, but it's saved locally in this browser.";
+      }
+    });
+  }
+
+  function renderJobDetailAppliedView(app){
+    document.getElementById("jobdetail-title").textContent = app.listingTitle;
+    const body = document.getElementById("jobdetail-body");
+    const listing = listings.find(l=>l.id===app.listingId);
+
+    const mine = (app.messages && app.messages.length ? app.messages : (app.message ? [{ content:app.message, sentAt:app.sentAt }] : []))
+      .map(m=>({ from:"you", content:m.content, at:m.sentAt, read:true }));
+    const theirsRaw = inboxMessages.filter(m=>m.listingId===app.listingId && m.from===app.posterPubkey);
+    const theirs = theirsRaw.map(m=>({ from:"them", content:m.content, at:m.created_at, read:m.read }));
+    const thread = [...mine, ...theirs].sort((a,b)=>a.at-b.at);
+
+    body.innerHTML = `
+      ${listing ? renderMediaGallery(listing.media) : ""}
+      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}</div>` : ""}
+      <div id="jd-thread"></div>
+      <div class="field" style="margin-top:16px;">
+        <label for="jd-reply-message">Send a follow-up message</label>
+        <textarea id="jd-reply-message" placeholder="Add more detail, ask a question…"></textarea>
+      </div>
+      <button class="btn btn-primary" id="jd-send-reply" style="width:100%; justify-content:center;">Send message</button>
+      <div class="notice" id="jd-reply-status" style="display:none; margin-top:14px;"></div>
+    `;
+
+    document.getElementById("jd-thread").innerHTML = thread.map(m=>`
+      <div class="inbox-item${m.read ? "" : " unread"}">
+        <div class="inbox-meta">
+          <span>${m.from==="you" ? "You" : shortNpub(nip19.npubEncode(app.posterPubkey))}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+          <span>${formatRelativeTime(m.at)}</span>
+        </div>
+        <div class="inbox-body">${escapeHtml(m.content)}</div>
+      </div>
+    `).join("");
+    markMessagesRead(theirsRaw);
+    renderMyJobsApplied();
+
+    document.getElementById("jd-send-reply").addEventListener("click", async ()=>{
+      const statusEl = document.getElementById("jd-reply-status");
+      const msgEl = document.getElementById("jd-reply-message");
+      const text = msgEl.value.trim();
+      statusEl.style.display = "block";
+      statusEl.classList.remove("good");
+      if(!text){ statusEl.textContent = "Write a message first."; return; }
+
+      try{
+        await sendEncryptedDM(app.posterPubkey, text, [["e", app.listingId]]);
+        app.messages = app.messages || [];
+        app.messages.push({ content:text, sentAt: Math.floor(Date.now()/1000) });
+        saveMyApplications();
+        msgEl.value = "";
+        renderJobDetailAppliedView(app);
+        renderMyJobs();
+      }catch(e){
+        console.error(e);
+        statusEl.textContent = "Couldn't send: " + (e.message || "unknown error");
+      }
+    });
+  }
+
+  function tagVal(tags, name){
+    const t = tags.find(t=>t[0]===name);
+    return t ? t[1] : null;
+  }
+
+  function eventToListing(evt){
+    try{
+      const tags = evt.tags || [];
+      const title = tagVal(tags,"title") || "Untitled listing";
+      const location = tagVal(tags,"location") || "Unknown location";
+      const price = {};
+      tags.filter(t=>t[0]==="price").forEach(t=>{
+        const amt = parseInt(t[1],10) || 0;
+        const cur = (t[2]||"").toLowerCase();
+        if(cur === "sats") price.sats = amt;
+        else if(cur === "gbp") price.gbp = amt;
+      });
+      const methods = tags.filter(t=>t[0]==="method").map(t=>t[1]);
+      const catTags = tags.filter(t=>t[0]==="t").map(t=>t[1]).filter(t=>t!==FEED_TAG);
+      const category = CATEGORIES.find(c=>catTags.includes(c.slug))?.slug || "errands";
+      const lnaddr = tagVal(tags,"zap") || tagVal(tags,"lud16") || "";
+      const latTag = tagVal(tags,"lat"), lonTag = tagVal(tags,"lon");
+      const dtag = tagVal(tags,"d") || evt.id;
+      const status = tagVal(tags,"status") || "active";
+      const media = tags.filter(t=>t[0]==="imeta").map(t=>{
+        const fields = {};
+        t.slice(1).forEach(entry=>{
+          const sp = entry.indexOf(" ");
+          if(sp === -1) return;
+          fields[entry.slice(0,sp)] = entry.slice(sp+1);
+        });
+        return { url: fields.url, type: fields.m || "" };
+      }).filter(m=>m.url);
+      return {
+        // kind:30402 listings are addressable (replaceable) by (pubkey, d-tag), not by event id —
+        // a republished/closed listing gets a new evt.id but the same d-tag, so the id used here
+        // must be pubkey+d-tag or a "closed" replacement looks like a brand-new listing
+        id: evt.pubkey + ":" + dtag, dtag, status, created_at: evt.created_at,
+        title, category, location, price, media,
+        methods: methods.length ? methods : (lnaddr ? ["lightning"] : ["cash"]),
+        desc: evt.content || "", lnaddr, demo:false, pubkey: evt.pubkey,
+        lat: latTag ? parseFloat(latTag) : null,
+        lon: lonTag ? parseFloat(lonTag) : null
+      };
+    }catch(e){ return null; }
+  }
+
+  // ---------- location controls ----------
+  const jobSearchInput = document.getElementById("job-search");
+  jobSearchInput.addEventListener("input", ()=>{
+    searchQuery = jobSearchInput.value.trim().toLowerCase();
+    renderFilters();
+    renderGrid();
+  });
+
+  const searchInput = document.getElementById("location-search");
+  const btnUseLocation = document.getElementById("use-my-location");
+  const btnSortNewest = document.getElementById("sort-newest");
+  const btnSortNearest = document.getElementById("sort-nearest");
+
+  function setSortMode(mode){
+    sortMode = mode;
+    btnSortNewest.classList.toggle("active", mode==="newest");
+    btnSortNearest.classList.toggle("active", mode==="nearest");
+    renderGrid();
+  }
+
+  btnSortNewest.addEventListener("click", ()=> setSortMode("newest"));
+  btnSortNearest.addEventListener("click", ()=>{
+    if(!refCoords){
+      setLocateStatus("Set a location first — search a town/postcode or tap “Use my location”.");
+      return;
+    }
+    setSortMode("nearest");
+  });
+
+  btnUseLocation.addEventListener("click", ()=>{
+    if(!navigator.geolocation){
+      setLocateStatus("Geolocation isn't available in this browser.");
+      return;
+    }
+    btnUseLocation.classList.add("active");
+    setLocateStatus("Requesting your location…");
+    navigator.geolocation.getCurrentPosition(
+      async (pos)=>{
+        refCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        refLabel = "your location";
+        searchInput.value = "";
+        setLocateStatus("Sorting from your current location.");
+        setSortMode("nearest");
+        try{
+          const cc = await reverseGeocode(refCoords.lat, refCoords.lon);
+          if(cc) setCurrencyForCountry(cc, "from your location");
+        }catch(e){ /* keep existing currency */ }
+      },
+      (err)=>{
+        btnUseLocation.classList.remove("active");
+        setLocateStatus("Couldn't get your location — check location permissions, or search a town instead.");
+      },
+      { enableHighAccuracy:false, timeout:8000 }
+    );
+  });
+
+  let searchDebounce;
+  searchInput.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter"){ e.preventDefault(); runLocationSearch(); }
+  });
+  searchInput.addEventListener("input", ()=>{
+    clearTimeout(searchDebounce);
+    if(searchInput.value.trim().length < 3) return;
+    searchDebounce = setTimeout(runLocationSearch, 700);
+  });
+
+  async function runLocationSearch(){
+    const q = searchInput.value.trim();
+    if(!q) return;
+    btnUseLocation.classList.remove("active");
+    setLocateStatus("Searching for “" + q + "”…");
+    try{
+      const result = await geocode(q);
+      refCoords = { lat: result.lat, lon: result.lon };
+      refLabel = q;
+      setLocateStatus("Sorting nearest to " + q + ".");
+      setSortMode("nearest");
+      if(result.countryCode) setCurrencyForCountry(result.countryCode, "near " + q);
+    }catch(e){
+      setLocateStatus("Couldn't find “" + q + "” — try a nearby town or postcode.");
+    }
+  }
+
+  // ---------- view mode (board / map) ----------
+  const btnViewBoard = document.getElementById("view-board");
+  const btnViewMap = document.getElementById("view-map");
+  const gridEl = document.getElementById("grid");
+  const mapEl = document.getElementById("map-view");
+
+  // Leaflet (CSS+JS) is only needed for Map view, which most visits never touch — loading it
+  // unconditionally in <head> used to block initial page render for every visitor. Instead it's
+  // injected on first switch to Map view.
+  let leafletLoadPromise = null;
+  function loadLeaflet(){
+    if(leafletLoadPromise) return leafletLoadPromise;
+    leafletLoadPromise = new Promise((resolve, reject)=>{
+      const cssLink = document.createElement("link");
+      cssLink.rel = "stylesheet";
+      cssLink.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(cssLink);
+
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("couldn't load the map library"));
+      document.head.appendChild(script);
+    });
+    return leafletLoadPromise;
+  }
+
+  function setViewMode(mode){
+    viewMode = mode;
+    btnViewBoard.classList.toggle("active", mode==="board");
+    btnViewMap.classList.toggle("active", mode==="map");
+    gridEl.style.display = mode==="board" ? "" : "none";
+    mapEl.style.display = mode==="map" ? "block" : "none";
+    if(mode === "map"){
+      loadLeaflet().then(()=>{
+        if(!leafletMap) initMap();
+        renderGrid(); // rebuild markers for current filter/sort
+        setTimeout(()=> leafletMap && leafletMap.invalidateSize(), 50);
+      }).catch(err=>{
+        console.error(err);
+        mapEl.innerHTML = '<div class="plain-note" style="margin:20px;">Couldn\'t load the map — check your connection and try again.</div>';
+      });
+    }
+  }
+  btnViewBoard.addEventListener("click", ()=> setViewMode("board"));
+  btnViewMap.addEventListener("click", ()=> setViewMode("map"));
+
+  function initMap(){
+    leafletMap = L.map("map-view", { scrollWheelZoom:true }).setView([51.48, -2.45], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(leafletMap);
+    markerLayer = L.layerGroup().addTo(leafletMap);
+  }
+
+  function renderMarkers(items){
+    if(!markerLayer) return;
+    markerLayer.clearLayers();
+    const withCoords = items.filter(l => typeof l.lat === "number" && typeof l.lon === "number");
+    withCoords.forEach(l=>{
+      const marker = L.marker([l.lat, l.lon]).addTo(markerLayer);
+      const isOwner = currentUser && l.pubkey === currentUser.pubkey;
+      const popupHtml = `
+        <span class="popup-cat">${catLabel(l.category)}</span>
+        <p class="popup-title">${escapeHtml(l.title)}</p>
+        <div class="popup-price">${formatPriceLine(l)}</div>
+        <button class="popup-btn" id="popup-pay-${l.id}">${isOwner ? "Close listing" : "Apply"}</button>
+      `;
+      marker.bindPopup(popupHtml);
+      marker.on("popupopen", ()=>{
+        const payBtn = document.getElementById(`popup-pay-${l.id}`);
+        if(!payBtn) return;
+        if(isOwner){
+          wireConfirmButton(payBtn, "Confirm close?", ()=> handleCloseListing(l));
+        } else {
+          payBtn.addEventListener("click", ()=> openApplyDrawer(l));
+        }
+      });
+    });
+    if(refCoords && !withCoords.some(l=>l._isRef)){
+      L.circleMarker([refCoords.lat, refCoords.lon], {
+        radius:7, color:"#C9A227", fillColor:"#C9A227", fillOpacity:0.9
+      }).addTo(markerLayer).bindPopup("You're searching from here");
+    }
+    if(withCoords.length){
+      const bounds = L.latLngBounds(withCoords.map(l=>[l.lat,l.lon]));
+      if(refCoords) bounds.extend([refCoords.lat, refCoords.lon]);
+      leafletMap.fitBounds(bounds.pad(0.2));
+    }
+  }
+
+  // ---------- init ----------
+  populateCategorySelect();
+  renderFilters();
+  renderGrid();
+  const restoredSession = loadSession();
+  if(restoredSession && restoredSession.locked){
+    lockedAccount = restoredSession;
+  } else {
+    currentUser = restoredSession;
+    if(currentUser) myApplications = loadMyApplications();
+  }
+  updateAuthUI();
+  connectRelays();
+  detectCurrencyFromIP();
+})();
+</script>
+</body>
+</html>
