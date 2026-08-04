@@ -1,0 +1,47 @@
+# stakrabbit
+
+**Free Gig Market for local casual jobs** — lawnmowing, dog walking, cleaning, moving help, bar shifts, errands, and other odd jobs, posted and found locally.
+
+stakrabbit is a decentralized classifieds board built on the [Nostr](https://nostr.com/) protocol. There's no company server behind it — listings, applications, and messages all travel over public Nostr relays. The entire app is a single static HTML file with no build step and no backend to run.
+
+## Features
+
+- **Browse without signing up** — search, filter by category, sort by newest or nearest, switch between a card board and a map view
+- **Post a job** — title, category, location, price, accepted payment methods (cash / bank transfer / Lightning), description, and optional photos, audio, or video
+- **Apply for a job** — sends an end-to-end encrypted direct message to the poster, with a threaded conversation you can keep replying to
+- **My Jobs** — one place to see everything you've posted (with status and applications received) and everything you've applied to (with replies), including an edit view for your own listings
+- **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, or import an existing one. Locally-generated keys can be encrypted at rest with a passphrase.
+- **Live currency conversion** — prices are entered in GBP and converted for display based on your detected location
+- **Media attachments** — photos/audio/video upload to a [Blossom](https://github.com/hzrd149/blossom) media server and attach to your listing
+
+## Running it
+
+No install, no build step. Either:
+
+- Open `index.html` directly in a browser, or
+- Serve it locally so geolocation and network calls behave normally under `http://`:
+
+  ```
+  python3 -m http.server 8000
+  ```
+
+  then visit `http://localhost:8000/`.
+
+## How it works
+
+There's no backend server or database. Instead:
+
+- **Listings** are published as [NIP-99](https://github.com/nostr-protocol/nips/blob/master/99.md) classified-listing events on public Nostr relays, tagged so the app can find them.
+- **Applications and replies** are encrypted Nostr direct messages between the applicant and the poster.
+- **Media** (photos, audio, video) is uploaded to a Blossom server and referenced by URL from the listing.
+- **Accounts** are just Nostr keypairs — there's no username/password system, no server-side accounts, and no company that can lock you out or lose your data.
+
+Because everything lives on the Nostr network, anyone running a compatible client can see and interact with the same listings — stakrabbit is a view into that shared network, not a walled garden.
+
+## Status
+
+This is a working prototype, not a production service. Payments (cash, bank transfer, Lightning) are always coordinated directly between the two parties — the app never handles or stores money or bank details.
+
+---
+
+*Want the technical architecture notes instead? See [`CLAUDE.md`](./CLAUDE.md) — though it currently describes an earlier version of the app and could use a refresh.*
