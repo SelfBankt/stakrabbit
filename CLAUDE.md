@@ -24,7 +24,7 @@ There are no accounts — identity is a Nostr keypair. Four ways to log in, all 
 
 - **Browser extension** (NIP-07, e.g. Alby) — signing delegates to `window.nostr`.
 - **Generate a new key** or **import an existing nsec/hex key** in-browser via `nostr-tools` (loaded from esm.sh as ES modules — this is the only non-trivial external dependency besides nostr-login below).
-- **Remote signer** (NIP-46 "bunker", e.g. nsec.app) via the [nostr-login](https://github.com/nostrband/nostr-login) library — see below.
+- **Remote signer** (NIP-46 "bunker", e.g. [Amber](https://github.com/greenart7c3/Amber) on Android or nsec.app on any device) via the [nostr-login](https://github.com/nostrband/nostr-login) library — see below.
 - Locally-held keys can optionally be **encrypted at rest** with a passphrase (PBKDF2 → AES-GCM via Web Crypto). An encrypted session restores as `lockedAccount` on page load and requires unlocking before `currentUser` is set — see `loadSession()` / `openUnlockPrompt()`.
 
 All event signing funnels through `signNostrEvent()` (signs only) and `signAndPublish()` (signs + broadcasts to relays + waits for a relay `OK`).
@@ -34,6 +34,8 @@ All event signing funnels through `signNostrEvent()` (signs only) and `signAndPu
 Deliberately **not** setting `data-no-banner`: with it set, the connect dialog `nlLaunch` is supposed to open never actually renders — confirmed in-browser that no-banner mode leaves the whole thing (banner *and* dialog) under a `hidden` class that `nlLaunch` doesn't clear, against the currently-published `nostr-login@latest`. Leaving the banner enabled (a small floating icon, unavoidable currently) is what makes the dialog open reliably.
 
 **Known fragility:** nostr-login's connect flow calls `AuthNostrService.getNostrConnectServices()` internally, which fetches the configured bunker's NIP-05-style discovery doc (`nsec.app/.well-known/nostr.json`) before rendering anything — confirmed in testing that this can fail (saw a live `503` from nsec.app, and separately a hung request), and when it does, nostr-login only logs `"Bad app info"` to console and shows nothing to the user. The 10s timeout in the `auth-connect-remote` click handler is this app's own fallback for that — if `nlAuth` hasn't fired by then, it shows an actionable error instead of leaving the button looking like it's doing something forever.
+
+**Deliberately not using NIP-55 (Android intents):** Amber also supports a second, Android-native path — the `nostrsigner:` URL scheme, which jumps straight to the Amber app rather than requiring a pasted bunker string. The [NIP-55 spec itself warns against this for web apps](https://github.com/nostr-protocol/nips/blob/master/55.md): without NIP-46, "the web client can't call the signer in the background, so the user sees a popup for every request." Since nearly every action in this app signs an event (post, apply, rate, vouch, accept, DM reply, each media upload's Blossom auth token), that would mean an app-switch round trip on every single one, not just at login. NIP-46 (the Remote signer tab above) gives background signing after one connect, so that's the only path built here.
 
 ### Listings are Nostr events, not database rows
 
