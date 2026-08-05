@@ -2983,9 +2983,14 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
 
   function initMap(){
     leafletMap = L.map("map-view", { scrollWheelZoom:true }).setView([51.48, -2.45], 11);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19
+    // tile.openstreetmap.org is the OSM Foundation's own server, meant for local/low-volume dev
+    // use only — its tile usage policy blocks embedding in third-party production sites without
+    // prior permission (that's the 403 "Blocked" tile). CARTO's basemap tiles are free for this
+    // kind of client-side use with no API key or account, so use those instead.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      maxZoom: 19,
+      subdomains: "abcd"
     }).addTo(leafletMap);
     markerLayer = L.layerGroup().addTo(leafletMap);
   }
