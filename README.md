@@ -2,7 +2,7 @@
 
 **Free Gig Market for local casual jobs** — lawnmowing, dog walking, cleaning, moving help, bar shifts, errands, and other odd jobs, posted and found locally.
 
-stakrabbit is a decentralized classifieds board built on the [Nostr](https://nostr.com/) protocol. There's no company server behind it — listings, applications, and messages all travel over public Nostr relays. The entire app is a single static HTML file with no build step and no backend to run.
+stakrabbit is a decentralized classifieds board built on the [Nostr](https://nostr.com/) protocol. There's no company server behind it — listings, applications, and messages all travel over public Nostr relays. The app itself (`index.html`) is a single static HTML file with no build step and no backend to run; a `manifest.json` and service worker (`sw.js`) sit alongside it to make the site installable as a PWA.
 
 ## Features
 
@@ -15,6 +15,7 @@ stakrabbit is a decentralized classifieds board built on the [Nostr](https://nos
 - **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, import an existing one, or connect a remote signer / "bunker" (e.g. [Amber](https://github.com/greenart7c3/Amber) on Android, or [nsec.app](https://nsec.app) on any device) via [nostr-login](https://github.com/nostrband/nostr-login) so your key never touches this browser at all. Locally-generated keys can be encrypted at rest with a passphrase.
 - **Live currency conversion** — prices are entered in GBP and converted for display based on your detected location
 - **Media attachments** — photos/audio/video upload to a [Blossom](https://github.com/hzrd149/blossom) media server and attach to your listing
+- **Installable** — "Add to Home Screen" on mobile or install as a desktop app; a service worker caches the app shell so it still loads (with whatever was last fetched) when you're offline
 
 ## Running it
 

@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>stakrabbit — quick jobs, local gig economy</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#04534D">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="stakrabbit">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -581,13 +589,25 @@
      Deliberately NOT setting data-no-banner: with it set, the connect dialog nlLaunch is meant to
      open never actually shows (the library's own no-banner mode leaves the whole thing — banner
      AND dialog — under a "hidden" class that nlLaunch doesn't clear, confirmed in-browser against
-     nostr-login@latest). Leaving the banner enabled is what makes the dialog reliably open; the
-     small floating icon it adds is a deliberate tradeoff for that, not an oversight. -->
+     nostr-login@latest). Its persistent floating icon is hidden by our own CSS instead (see
+     `nl-banner` in <style>) and only shown during an active connect attempt — see
+     showRemoteSignerIcon()/hideRemoteSignerIcon() in the module script below. -->
 <script src="https://www.unpkg.com/nostr-login@latest/dist/unpkg.js"
   data-methods="connect"
   data-bunkers="nsec.app"
   data-perms="sign_event:30402,sign_event:4,sign_event:1985,sign_event:24242,nip04_encrypt,nip04_decrypt"
 ></script>
+<script>
+  // PWA: registers the app-shell cache from sw.js so the board loads offline after a first visit
+  // and the site becomes installable. Deferred to "load" so it doesn't compete with anything the
+  // initial page render needs; registration failure (e.g. served over plain http on a non-
+  // localhost origin) is silently ignored rather than surfaced, since the app works fine without it.
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", ()=>{
+      navigator.serviceWorker.register("/sw.js").catch(()=>{});
+    });
+  }
+</script>
 </head>
 <body>
 

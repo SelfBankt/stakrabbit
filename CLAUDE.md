@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`index.html` is the entire project — a single self-contained static page for **stakrabbit**, a decentralized local-gig-economy classifieds board built on the [Nostr](https://nostr.com/) protocol. There is no build step, no package manager, and no backend server; Nostr relays and a [Blossom](https://github.com/hzrd149/blossom) media server play that role instead. All HTML, CSS, and JS live inline in one file, structured as a single IIFE inside `<script type="module">`.
+`index.html` is almost the entire project — a single self-contained static page for **stakrabbit**, a decentralized local-gig-economy classifieds board built on the [Nostr](https://nostr.com/) protocol. There is no build step, no package manager, and no backend server; Nostr relays and a [Blossom](https://github.com/hzrd149/blossom) media server play that role instead. All HTML, CSS, and JS live inline in one file, structured as a single IIFE inside `<script type="module">`. `manifest.json`, `sw.js`, and `icons/` are the only other files, added purely to make the page installable as a PWA — see "PWA" below.
 
 ## Running it
 
@@ -105,6 +105,16 @@ Prices are stored in GBP (`listing.price.gbp`) and converted for display only. O
 
 **Map tiles gotcha:** `initMap()` serves the Voyager style from CARTO (`basemaps.cartocdn.com/rastertiles/voyager`), not `tile.openstreetmap.org`. The OSM Foundation's own tile server is meant for local/low-volume development only — its usage policy blocks third-party production sites that embed it without prior permission, and stakrabbit.com hit exactly that block (403 "Blocked" tiles) before this was switched. CARTO's paler `light_all` style was tried first but dropped for low contrast (roads/water/parks barely distinguishable) in favor of Voyager's fuller color. Don't point the tile layer back at `tile.openstreetmap.org` or `light_all`. Nominatim (`nominatim.openstreetmap.org`, used for search/reverse-geocoding above) is a separate OSM service with its own more permissive fair-use policy and isn't affected by this.
 
+### PWA
+
+`manifest.json` + `sw.js` + `icons/` (192/512/maskable/apple-touch/favicons, all cropped from the jumping-rabbit mark embedded in the header logo, on the `--moss-dark` brand green) make the page installable and give it basic offline access — the guide's Tier-7-style "cheapest path to app-like" item, and the only one of the guide's suggestions that needed literally no architectural tradeoff, since it's purely additive to a static page.
+
+`sw.js` is **network-first**, not cache-first, for the app shell (`/`, `/index.html`, `/manifest.json`): this is a single evolving `index.html` with no versioned build output, so a cache-first strategy would leave installed users stuck on whatever they first loaded. Every successful same-origin GET re-caches its response as it flows through; only on a failed fetch (offline) does it fall back to whatever's cached. The fetch handler explicitly skips cross-origin requests (Nominatim, Blossom, ipapi.co, frankfurter.app, CARTO tiles, esm.sh/unpkg scripts) — relay WebSocket connections never go through the Fetch API at all, so they need no special-casing.
+
+Service worker registration (in `<head>`, deferred to the `load` event) fails silently if it fails — e.g. served over plain `http://` on a non-localhost origin, where service workers are blocked entirely — since the app works fine without it either way.
+
+**Known limitation:** this is app-shell caching only, not the guide's fuller vision of "cache job-board data for offline viewing" and "queue actions to sync when connectivity returns." A user who loses connection mid-session keeps whatever was already in memory (same as any tab), but there's no structured offline-listings cache or background-sync queue for things like offline-drafted applications.
+
 ## Known limitations
 
 - Applications/message threads are local-only (see above) — no cross-device sync.
@@ -115,3 +125,4 @@ Prices are stored in GBP (`listing.price.gbp`) and converted for display only. O
 - Offer prices are parsed best-effort out of plain DM text (see "Quote/bidding flow" above), not a structured/signed field — a hand-crafted or non-stakrabbit application won't sort correctly if it doesn't follow the `Offering: £N` convention.
 - Tier 1 (phone verification) is intentionally not implemented — see "Verification tiers" — so the trust ladder currently jumps straight from Tier 0 to Tier 2. Vouching (Tier 2) has the same sybil weakness as ratings: nothing stops fresh pubkeys vouching for each other.
 - The remote signer login (nostr-login)'s connect flow depends on an external discovery fetch that's been observed to fail; this app's own 10s timeout at least surfaces that failure instead of hanging silently. Its floating icon briefly reappears during that window (see "Identity and auth" above) since it and the connect dialog share the same host element — a minor, self-correcting cosmetic gap, not a functional issue.
+- PWA offline support is app-shell caching only (see "PWA" above) — no offline listings cache, no background sync for actions taken while disconnected.
