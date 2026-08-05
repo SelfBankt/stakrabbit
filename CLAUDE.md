@@ -20,13 +20,20 @@ There is no test suite or lint config.
 
 ### Identity and auth
 
-There are no accounts — identity is a Nostr keypair. Three ways to log in, all converging on a `currentUser = { method: "nip07"|"local", pubkey, npub, secretKey? }`:
+There are no accounts — identity is a Nostr keypair. Four ways to log in, all converging on a `currentUser = { method: "nip07"|"local", pubkey, npub, secretKey?, viaNostrLogin? }`:
 
 - **Browser extension** (NIP-07, e.g. Alby) — signing delegates to `window.nostr`.
-- **Generate a new key** or **import an existing nsec/hex key** in-browser via `nostr-tools` (loaded from esm.sh as ES modules — this is the only non-trivial external dependency).
+- **Generate a new key** or **import an existing nsec/hex key** in-browser via `nostr-tools` (loaded from esm.sh as ES modules — this is the only non-trivial external dependency besides nostr-login below).
+- **Remote signer** (NIP-46 "bunker", e.g. nsec.app) via the [nostr-login](https://github.com/nostrband/nostr-login) library — see below.
 - Locally-held keys can optionally be **encrypted at rest** with a passphrase (PBKDF2 → AES-GCM via Web Crypto). An encrypted session restores as `lockedAccount` on page load and requires unlocking before `currentUser` is set — see `loadSession()` / `openUnlockPrompt()`.
 
 All event signing funnels through `signNostrEvent()` (signs only) and `signAndPublish()` (signs + broadcasts to relays + waits for a relay `OK`).
+
+**Remote signer (nostr-login):** loaded via a plain `<script>` tag in `<head>` (it's a UMD bundle, not an ES module, so it can't live inside the app's own `<script type="module">`), configured with `data-methods="connect"` — the extension/generate/import methods above already have their own tabs, and its OTP-via-DM method needs a backend this app doesn't run (see "Verification tiers" below on why phone/OTP was skipped for the same reason). After a bunker connects, `window.nostr` becomes NIP-07-compatible, so `signNostrEvent()`'s existing `"nip07"` branch handles it unchanged — a nostr-login session is just `{ method:"nip07", viaNostrLogin:true, ... }`, built in the `nlAuth` event listener by calling `window.nostr.getPublicKey()`. `viaNostrLogin` is persisted through `saveSession()`/`loadSession()` so `logOut()` knows to also dispatch `nlLogout` (tearing down the underlying bunker connection) after a page reload, not just on the same page load the connection was made on.
+
+Deliberately **not** setting `data-no-banner`: with it set, the connect dialog `nlLaunch` is supposed to open never actually renders — confirmed in-browser that no-banner mode leaves the whole thing (banner *and* dialog) under a `hidden` class that `nlLaunch` doesn't clear, against the currently-published `nostr-login@latest`. Leaving the banner enabled (a small floating icon, unavoidable currently) is what makes the dialog open reliably.
+
+**Known fragility:** nostr-login's connect flow calls `AuthNostrService.getNostrConnectServices()` internally, which fetches the configured bunker's NIP-05-style discovery doc (`nsec.app/.well-known/nostr.json`) before rendering anything — confirmed in testing that this can fail (saw a live `503` from nsec.app, and separately a hung request), and when it does, nostr-login only logs `"Bad app info"` to console and shows nothing to the user. The 10s timeout in the `auth-connect-remote` click handler is this app's own fallback for that — if `nlAuth` hasn't fired by then, it shows an actionable error instead of leaving the button looking like it's doing something forever.
 
 ### Listings are Nostr events, not database rows
 
@@ -105,3 +112,4 @@ Prices are stored in GBP (`listing.price.gbp`) and converted for display only. O
 - Accepting an applicant is optional — a poster can still close a listing without ever hiring anyone through the app, in which case rating falls back to allowing any applicant (see "Reputation" above).
 - Offer prices are parsed best-effort out of plain DM text (see "Quote/bidding flow" above), not a structured/signed field — a hand-crafted or non-stakrabbit application won't sort correctly if it doesn't follow the `Offering: £N` convention.
 - Tier 1 (phone verification) is intentionally not implemented — see "Verification tiers" — so the trust ladder currently jumps straight from Tier 0 to Tier 2. Vouching (Tier 2) has the same sybil weakness as ratings: nothing stops fresh pubkeys vouching for each other.
+- The remote signer login (nostr-login) adds a small floating icon to every page (couldn't be suppressed without also breaking the connect dialog — see "Identity and auth" above), and its connect flow depends on an external discovery fetch that's been observed to fail; this app's own 10s timeout at least surfaces that failure instead of hanging silently.

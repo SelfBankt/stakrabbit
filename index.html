@@ -66,6 +66,7 @@
     border-radius:100px;
     color:var(--paper);
     font-size:12.5px;
+    font-family:'Spline Sans Mono', monospace;
   }
   .dot{ width:8px;height:8px;border-radius:50%; background:#e0b23c; transition:background .3s; }
   .dot.live{ background:#7CC576; box-shadow:0 0 0 3px rgba(124,197,118,0.25); }
@@ -566,6 +567,22 @@
   }
   .checkbox-row input{ margin-top:3px; }
 </style>
+<!-- nostr-login: adds a "remote signer" (NIP-46 bunker) login option. Restricted to just the
+     "connect" method — extension/generate-key/import already have their own tabs built directly
+     into this app's login drawer (below), and its OTP-via-DM method needs a backend this app
+     doesn't run (see CLAUDE.md's "Verification tiers" note on why phone/OTP was skipped too).
+     After connecting, window.nostr becomes a NIP-07-compatible provider, so nothing else in this
+     app's signing/DM code needs to change — see the nlAuth listener further down.
+     Deliberately NOT setting data-no-banner: with it set, the connect dialog nlLaunch is meant to
+     open never actually shows (the library's own no-banner mode leaves the whole thing — banner
+     AND dialog — under a "hidden" class that nlLaunch doesn't clear, confirmed in-browser against
+     nostr-login@latest). Leaving the banner enabled is what makes the dialog reliably open; the
+     small floating icon it adds is a deliberate tradeoff for that, not an oversight. -->
+<script src="https://www.unpkg.com/nostr-login@latest/dist/unpkg.js"
+  data-methods="connect"
+  data-bunkers="nsec.app"
+  data-perms="sign_event:30402,sign_event:4,sign_event:1985,sign_event:24242,nip04_encrypt,nip04_decrypt"
+></script>
 </head>
 <body>
 
@@ -799,6 +816,7 @@
       <button class="auth-tab active" data-auth="extension">Extension</button>
       <button class="auth-tab" data-auth="create">Create account</button>
       <button class="auth-tab" data-auth="import">I have a key</button>
+      <button class="auth-tab" data-auth="remote">Remote signer</button>
     </div>
 
     <div class="auth-panel active" data-auth-panel="extension">
@@ -845,6 +863,12 @@
       </div>
       <button class="btn btn-primary" id="auth-import-key" style="width:100%; justify-content:center;">Log in</button>
       <div class="notice" id="auth-import-status" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <div class="auth-panel" data-auth-panel="remote">
+      <p class="plain-note" style="margin-bottom:16px;">Connect a remote signer (a "bunker") — an app like <a href="https://nsec.app" target="_blank" rel="noopener noreferrer">nsec.app</a> holds your key and approves each signature, so it never touches this browser at all.</p>
+      <button class="btn btn-primary" id="auth-connect-remote" style="width:100%; justify-content:center;">Connect remote signer</button>
+      <div class="notice" id="auth-remote-status" style="display:none; margin-top:14px;"></div>
     </div>
 
     <div class="auth-panel" data-auth-panel="unlock">
@@ -1395,7 +1419,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
 
   // ---------- account / auth ----------
   const AUTH_STORAGE_KEY = "stakrabbit_auth_v1";
-  let currentUser = null; // { method:"nip07"|"local", pubkey, npub, secretKey?, encrypted? }
+  let currentUser = null; // { method:"nip07"|"local", pubkey, npub, secretKey?, encrypted?, viaNostrLogin? }
   let lockedAccount = null; // { pubkey, npub, salt, iv, ciphertext } — passphrase-protected key not yet unlocked this page load
 
   function bytesToHex(bytes){
@@ -1457,6 +1481,10 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   function saveSession(){
     if(!currentUser){ localStorage.removeItem(AUTH_STORAGE_KEY); return; }
     const payload = { method: currentUser.method, pubkey: currentUser.pubkey };
+    // tracked so logOut() knows to also tear down the underlying bunker connection after a
+    // reload — without this, nostr-login could silently reconnect a session the user logged
+    // out of, since it persists its own connection state independently of ours
+    if(currentUser.method === "nip07" && currentUser.viaNostrLogin) payload.viaNostrLogin = true;
     if(currentUser.method === "local"){
       if(currentUser.encrypted){
         payload.encrypted = true;
@@ -1485,7 +1513,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         return { method:"local", secretKey:sk, pubkey:pk, npub: nip19.npubEncode(pk) };
       }
       if(data.method === "nip07" && data.pubkey){
-        return { method:"nip07", pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey) };
+        return { method:"nip07", pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey), viaNostrLogin: !!data.viaNostrLogin };
       }
     }catch(e){ /* corrupt session, ignore */ }
     return null;
@@ -1516,6 +1544,9 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   }
 
   function logOut(){
+    // dispatched before clearing currentUser purely so the check below sees the flag; nostr-login
+    // listens for this event itself (see the script tag in <head>) and drops the bunker connection
+    if(currentUser?.viaNostrLogin) document.dispatchEvent(new Event("nlLogout"));
     currentUser = null;
     inboxMessages = [];
     myApplications = [];
@@ -1594,6 +1625,44 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       logIn({ method:"nip07", pubkey, npub: nip19.npubEncode(pubkey) });
     }catch(e){
       status.textContent = "Couldn't connect — the extension request was cancelled or denied.";
+    }
+  });
+
+  // -- remote signer (nostr-login, NIP-46 bunker) --
+  // nostr-login's own connect dialog depends on fetching the configured bunker's NIP-05-style
+  // discovery doc (nsec.app/.well-known/nostr.json) before it will render anything — if that
+  // fetch fails (confirmed in testing: nsec.app returned a live 503 at one point), the dialog
+  // never appears and nostr-login only logs the failure to console, with nothing shown to the
+  // user. This timeout is our own fallback so a dead upstream doesn't leave the button looking
+  // like it's doing something forever.
+  let remoteLoginTimeout = null;
+  document.getElementById("auth-connect-remote").addEventListener("click", ()=>{
+    const status = document.getElementById("auth-remote-status");
+    status.style.display = "block";
+    status.classList.remove("good");
+    status.textContent = "Opening connection dialog…";
+    document.dispatchEvent(new CustomEvent("nlLaunch", { detail: "login" }));
+    clearTimeout(remoteLoginTimeout);
+    remoteLoginTimeout = setTimeout(()=>{
+      if(currentUser) return;
+      status.textContent = "Couldn't open the connection dialog — the remote signer's discovery service may be unreachable right now. Try again in a moment, or use Extension / Create account / I have a key instead.";
+    }, 10000);
+  });
+
+  // nostr-login fires this once a bunker session is live (or auto-restores a previous one on
+  // page load) — window.nostr is already a working NIP-07 provider by this point, so logging in
+  // here is identical to the extension flow above, just with a different signer behind the scenes
+  document.addEventListener("nlAuth", async (e)=>{
+    if(currentUser || !(e.detail?.type === "login" || e.detail?.type === "signup")) return;
+    clearTimeout(remoteLoginTimeout);
+    try{
+      const pubkey = await window.nostr.getPublicKey();
+      logIn({ method:"nip07", viaNostrLogin:true, pubkey, npub: nip19.npubEncode(pubkey) });
+    }catch(err){
+      console.error(err);
+      const status = document.getElementById("auth-remote-status");
+      status.style.display = "block";
+      status.textContent = "Connected, but couldn't read the public key back.";
     }
   });
 

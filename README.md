@@ -12,7 +12,7 @@ stakrabbit is a decentralized classifieds board built on the [Nostr](https://nos
 - **My Jobs** — one place to see everything you've posted (with status and applications received) and everything you've applied to (with replies), including an edit view for your own listings
 - **Reputation** — once a job is closed, poster and tasker can rate each other 1-5 stars with an optional short review. Ratings are signed Nostr events, not rows in a database, so they follow a pubkey to any compatible client, not just stakrabbit
 - **Vouching** — anyone can vouch for another pubkey; once a pubkey has enough distinct vouchers it shows a "✓ Vouched" badge. This is the one implemented rung of a light-touch verification ladder — phone/SMS verification and paid ID checks are deliberately not implemented (see [`CLAUDE.md`](./CLAUDE.md) for why)
-- **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, or import an existing one. Locally-generated keys can be encrypted at rest with a passphrase.
+- **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, import an existing one, or connect a remote signer / "bunker" (e.g. [nsec.app](https://nsec.app)) via [nostr-login](https://github.com/nostrband/nostr-login) so your key never touches this browser at all. Locally-generated keys can be encrypted at rest with a passphrase.
 - **Live currency conversion** — prices are entered in GBP and converted for display based on your detected location
 - **Media attachments** — photos/audio/video upload to a [Blossom](https://github.com/hzrd149/blossom) media server and attach to your listing
 
