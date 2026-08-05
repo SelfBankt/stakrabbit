@@ -8,7 +8,7 @@ stakrabbit is a decentralized classifieds board built on the [Nostr](https://nos
 
 - **Browse without signing up** — search, filter by category, sort by newest or nearest, switch between a card board and a map view
 - **Post a job** — title, category, location, price, accepted payment methods (cash / bank transfer / Lightning), description, and optional photos, audio, or video
-- **Apply for a job** — sends an end-to-end encrypted direct message to the poster, with a threaded conversation you can keep replying to
+- **Apply for a job** — sends an end-to-end encrypted direct message to the poster, with a threaded conversation you can keep replying to. Counter-offer your own price rather than just applying at the asking price, and the poster can sort offers by price, rating, or recency and accept the one they want
 - **My Jobs** — one place to see everything you've posted (with status and applications received) and everything you've applied to (with replies), including an edit view for your own listings
 - **Reputation** — once a job is closed, poster and tasker can rate each other 1-5 stars with an optional short review. Ratings are signed Nostr events, not rows in a database, so they follow a pubkey to any compatible client, not just stakrabbit
 - **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, or import an existing one. Locally-generated keys can be encrypted at rest with a passphrase.

@@ -42,6 +42,14 @@ Closing a listing (`handleCloseListing()` / `closeListing()`) republishes with `
 
 **Your own sent applications and replies are never fetched back from relays** — they're recorded locally in `myApplications` (persisted to `localStorage` per-pubkey via `saveMyApplications()`) at the moment they're sent. This means an application's outbound message history does not sync across browsers/devices, even though the underlying DMs are real Nostr events.
 
+### Quote/bidding flow
+
+An application is also a bid: `sendApplication()` embeds an `Offering: £N` line in the plain-text DM body alongside the free-text message — plain text, not a tag, so the application still reads fine as an ordinary DM in any Nostr client that doesn't know this convention. `handleIncomingDM()` extracts `offerGbp` from that line with a best-effort regex; an absent or unparseable offer just sorts last rather than breaking anything (see `sortApplications()`). This is what turns "apply at face value" into actual price discovery, per the guide's Airtasker comparison.
+
+A listing gains a third status, `"in-progress"`, sitting between `"active"` and `"inactive"`: `handleAcceptApplicant()` (wired to each applicant's "Accept this offer" button in `renderJobDetailPostedView()`) republishes the listing with `status: "in-progress"` and a new `["accepted", pubkey]` tag, and DMs the accepted applicant. `isOpenListing()` hides both `"in-progress"` and `"inactive"` listings from the public board — once someone's hired, it shouldn't still look like an open opportunity. `openApplyDrawer()` also refuses to let anyone apply to a listing that isn't `"active"`.
+
+Accepting is optional, not mandatory — a poster can still just close a listing without ever accepting anyone (older listings from before this feature, or a poster who just doesn't bother), so `listing.acceptedPubkey` may be null even on a closed listing. Reputation gating (see below) and `renderJobDetailAppliedView()`'s "you got this job" / "went to someone else" banners both fall back to their pre-Accept behavior in that case.
+
 ### Media attachments
 
 Photos/audio/video attach via [NIP-92](https://github.com/nostr-protocol/nips/blob/master/92.md) `imeta` tags pointing at files uploaded to a Blossom server (`BLOSSOM_SERVER`, currently `blossom.band`). Blossom upload requires a signed authorization token (`kind: 24242`, per [BUD-11](https://github.com/hzrd149/blossom/blob/master/buds/11.md)) built by `createBlossomAuthToken()` — this token is signed but **never published to a relay**, it's sent only as an HTTP `Authorization` header on the upload request itself.
@@ -67,7 +75,7 @@ A rating event tags `["p", ratedPubkey]` (who's being rated) and `["e", listingI
 
 Unlike applications, rating events are public and unencrypted, so `ratingEvents` doesn't need local persistence the way `myApplications` does — a fresh relay subscription (`satrabbit-ratings` in `connectRelays()`) reconstructs the full picture on any device.
 
-`renderRatingWidget()` is the shared submit UI (1-5 stars + optional short text), used from both `renderJobDetailPostedView()` (poster rates each applicant) and `renderJobDetailAppliedView()` (tasker rates the poster). Both gate on the listing being closed, as the closest proxy this app has for "job completed" — there's no separate "hire" step that records which applicant actually did the job, so a poster can rate any applicant they choose to.
+`renderRatingWidget()` is the shared submit UI (1-5 stars + optional short text), used from both `renderJobDetailPostedView()` (poster rates each applicant) and `renderJobDetailAppliedView()` (tasker rates the poster). Both gate on the listing being closed, as the closest proxy this app has for "job completed." Once a listing has an `acceptedPubkey` (see "Quote/bidding flow" below), only that applicant can be rated/can rate back — before Accept existed (or for a poster who closes without ever accepting anyone), it falls back to allowing any applicant, since there's nothing more specific to key off.
 
 **Sybil caveat:** nothing here stops a fresh pubkey from rating itself, or two colluding pubkeys from trading fake 5-star ratings — real sybil resistance would mean only counting a rating if it's tied to a job whose payment actually settled (see the escrow write-up), which this app doesn't implement. Treat scores as a lightweight social signal, not a verified guarantee.
 
@@ -81,4 +89,5 @@ Prices are stored in GBP (`listing.price.gbp`) and converted for display only. O
 - DMs use NIP-04, which encrypts content but not metadata (relays can see who's messaging whom, and when) — NIP-17 would close that gap but isn't implemented.
 - No pagination — the relay subscription fetches up to 50 listings; older ones fall off.
 - Ratings aren't sybil-resistant (see "Reputation" above) — they're not gated on a real settled payment, so a determined bad actor can rate themselves or a colluding pubkey.
-- No formal "hire" step — rating gates on the listing being closed, not on a specific applicant being marked as the one who did the job.
+- Accepting an applicant is optional — a poster can still close a listing without ever hiring anyone through the app, in which case rating falls back to allowing any applicant (see "Reputation" above).
+- Offer prices are parsed best-effort out of plain DM text (see "Quote/bidding flow" above), not a structured/signed field — a hand-crafted or non-stakrabbit application won't sort correctly if it doesn't follow the `Offering: £N` convention.

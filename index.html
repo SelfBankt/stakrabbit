@@ -288,6 +288,12 @@
     background:var(--gold-soft); color:#7A4200;
     white-space:nowrap;
   }
+  .offer-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10.5px;
+    padding:4px 8px; border-radius:4px;
+    background:var(--mist); color:var(--moss-dark);
+    white-space:nowrap; font-weight:600;
+  }
   .star-picker{ display:flex; gap:4px; }
   .star-btn{
     background:none; border:none; cursor:pointer; padding:2px;
@@ -517,7 +523,7 @@
     background:var(--gold); margin-left:6px;
   }
   .inbox-item .inbox-meta{
-    display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--ink-soft);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 10px; font-size:11.5px; color:var(--ink-soft);
     font-family:'Spline Sans Mono', monospace; margin-bottom:8px;
   }
   .inbox-item .inbox-body{ font-size:13.5px; line-height:1.5; white-space:pre-wrap; }
@@ -864,6 +870,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // Reusing NIP-32 rather than inventing a bespoke kind means any Nostr client that already
   // understands labels can display these, not just this app.
   const RATING_NAMESPACE = "com.stakrabbit.rating";
+  const APPLICATION_EXPIRY_SECONDS = 60*60*24*7; // 7 days — cosmetic staleness flag, doesn't hide or delete anything
 
   const CATEGORIES = [
     { slug:"gardening",  label:"Gardening & lawns" },
@@ -897,6 +904,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // so a grid re-render triggered by an unrelated incoming relay event (which rebuilds every card)
   // doesn't silently drop the confirmation the user is mid-click on
   let myApplications = []; // jobs currentUser has applied to: { listingId, listingTitle, posterPubkey, message, sentAt }
+  let applicationSortMode = "recency"; // "recency" | "price" | "rating" — poster's sort choice in the applications list, persisted across re-renders of that drawer
   // signed kind:1985 rating events seen from relays — unlike applications these are public and
   // unencrypted, so (unlike myApplications) they don't need local persistence: a fresh relay
   // subscription reconstructs them on any device. { id, from, ratedPubkey, listingId, rating, content, created_at }
@@ -1010,10 +1018,17 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     return `${l.title} ${l.desc} ${l.location}`.toLowerCase().includes(searchQuery);
   }
 
+  // "active" is the only status still open for new applications — "in-progress" means someone's
+  // already been accepted, "inactive" means closed — both are hidden from the public board/search
+  // the same way, just kept in `listings` so My Jobs can still show them (see computeVisibleItems)
+  function isOpenListing(l){
+    return l.status !== "inactive" && l.status !== "in-progress";
+  }
+
   // ---------- render filters ----------
   function renderFilters(){
     const el = document.getElementById("filters");
-    const searchable = listings.filter(l=>l.status !== "inactive").filter(matchesSearch);
+    const searchable = listings.filter(isOpenListing).filter(matchesSearch);
     const counts = { all: searchable.length };
     CATEGORIES.forEach(c => counts[c.slug] = searchable.filter(l=>l.category===c.slug).length);
 
@@ -1030,7 +1045,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
 
   // ---------- render grid ----------
   function computeVisibleItems(){
-    let items = listings.filter(l=>l.status !== "inactive");
+    let items = listings.filter(isOpenListing);
     items = activeFilter==="all" ? items : items.filter(l=>l.category===activeFilter);
     items = items.filter(matchesSearch);
 
@@ -1263,13 +1278,20 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       body.innerHTML = `<div class="plain-note"><strong>Demo listing.</strong> This is illustrative sample data, not a real posting — there's no poster to apply to.</div>`;
     } else if(listing.pubkey === currentUser.pubkey){
       body.innerHTML = `<div class="plain-note"><strong>This is your own listing.</strong> You can't apply to a job you posted yourself.</div>`;
+    } else if(listing.status && listing.status !== "active"){
+      body.innerHTML = `<div class="plain-note"><strong>No longer taking applications.</strong> ${listing.status === "in-progress" ? "The poster has already accepted someone for this job." : "This listing has been closed."}</div>`;
     } else {
       const wantsLightning = (listing.methods||[]).includes("lightning");
+      const askingGbp = listing.price && listing.price.gbp;
       body.innerHTML = `
         ${renderMediaGallery(listing.media)}
         <div class="field">
           <label for="f-apply-message">Message to the poster</label>
           <textarea id="f-apply-message" placeholder="Introduce yourself, your availability, relevant experience…"></textarea>
+        </div>
+        <div class="field">
+          <label for="f-apply-price">Your price in £${askingGbp ? ` (asking price is £${askingGbp})` : ""}</label>
+          <input id="f-apply-price" type="number" min="1" value="${askingGbp || ""}">
         </div>
         ${wantsLightning ? `
         <div class="field">
@@ -1294,9 +1316,11 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     const status = document.getElementById("apply-status");
     const btn = document.getElementById("send-application");
     const msgEl = document.getElementById("f-apply-message");
+    const priceEl = document.getElementById("f-apply-price");
     const lnaddrEl = document.getElementById("f-apply-lnaddr");
     const message = msgEl.value.trim();
     const applicantLnaddr = lnaddrEl ? lnaddrEl.value.trim() : "";
+    const offerGbp = priceEl ? parseInt(priceEl.value, 10) : NaN;
 
     status.style.display = "block";
     status.classList.remove("good");
@@ -1305,11 +1329,19 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       status.textContent = "Write a short message before sending.";
       return;
     }
+    if(!(offerGbp > 0)){
+      status.textContent = "Enter your price for this job.";
+      return;
+    }
 
     btn.disabled = true;
     status.textContent = "Sending…";
 
-    const content = `Application for "${listing.title}":\n\n${message}` +
+    // "Offering: £N" is plain text so any Nostr DM client can still read the application, but
+    // it's also a parseable convention our own client extracts (see handleIncomingDM) so posters
+    // can sort/compare offers instead of having to open every message — this is what turns a flat
+    // "apply at face value" board into an actual quote/bidding flow (see #3 in the guide)
+    const content = `Application for "${listing.title}":\n\n${message}\n\nOffering: £${offerGbp}` +
       (applicantLnaddr ? `\n\nLightning address for payment: ${applicantLnaddr}` : "");
 
     try{
@@ -1726,7 +1758,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       id: currentUser.pubkey + ":" + dtag, dtag,
       title, category, location, price, methods, desc,
       demo:false, lat:null, lon:null, pubkey: currentUser.pubkey,
-      status: "active", created_at: Math.floor(Date.now()/1000)
+      status: "active", acceptedPubkey: null, created_at: Math.floor(Date.now()/1000)
     };
 
     try{
@@ -1788,7 +1820,10 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       ["t", listing.category],
       ["status", status],
       ...(listing.lat!=null ? [["lat", String(listing.lat)]] : []),
-      ...(listing.lon!=null ? [["lon", String(listing.lon)]] : [])
+      ...(listing.lon!=null ? [["lon", String(listing.lon)]] : []),
+      // records which applicant got the job — see handleAcceptApplicant — so the accepted tasker
+      // (and reputation gating in the job-detail views) survives a page reload or a second device
+      ...(listing.acceptedPubkey ? [["accepted", listing.acceptedPubkey]] : [])
     ];
   }
 
@@ -1964,6 +1999,54 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     renderMyJobs();
   }
 
+  // republishes with status:in-progress and an "accepted" tag — this is the "Accept" action from
+  // the quote/bidding flow (#3): it records which applicant got the job (so reputation and the
+  // applied-view banner can key off it) and pulls the listing off the public board, but doesn't
+  // move any money — that's escrow's job (#1) once it exists, this just marks who to pay
+  async function handleAcceptApplicant(listing, message){
+    listing.acceptedPubkey = message.from;
+    listing.status = "in-progress";
+    try{
+      await signAndPublish({ kind:30402, tags: buildListingTags(listing, "in-progress"), content: listing.desc });
+    }catch(e){
+      console.error(e);
+    }
+    try{
+      await sendEncryptedDM(
+        message.from,
+        `Good news — you've been accepted for "${listing.title}"! Message here to sort out the details.`,
+        [["e", listing.id]]
+      );
+    }catch(e){
+      console.error(e);
+    }
+    renderFilters();
+    renderGrid();
+    renderMyJobs();
+  }
+
+  // "recency" is already inboxMessages' natural order (newest first); price sorts cheapest-first
+  // (natural for a poster comparing bids) and rating sorts highest-first, with unrated/unpriced
+  // applications pushed to the end rather than dropped
+  function sortApplications(applications){
+    const arr = [...applications];
+    if(applicationSortMode === "price"){
+      arr.sort((a,b)=>{
+        if(a.offerGbp==null && b.offerGbp==null) return 0;
+        if(a.offerGbp==null) return 1;
+        if(b.offerGbp==null) return -1;
+        return a.offerGbp - b.offerGbp;
+      });
+    } else if(applicationSortMode === "rating"){
+      arr.sort((a,b)=>{
+        const ra = getReputation(a.from)?.avg ?? -1;
+        const rb = getReputation(b.from)?.avg ?? -1;
+        return rb - ra;
+      });
+    }
+    return arr;
+  }
+
   // ---------- relay connections (read-only feed of live NIP-99 kind:30402 events tagged satrabbit) ----------
   function updateRelayStatus(){
     const dot = document.getElementById("relay-dot");
@@ -2066,12 +2149,19 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         plaintext = await nip04.decrypt(currentUser.secretKey, evt.pubkey, evt.content);
       }
 
+      // "Offering: £N" is a plain-text convention sendApplication embeds in the message body (not
+      // a tag) so the application still reads fine in any Nostr DM client — extracting it here is
+      // best-effort only, and absent/unparseable offers just sort last (see sortApplications)
+      const offerMatch = plaintext.match(/Offering:\s*£(\d+(?:\.\d+)?)/);
+      const offerGbp = offerMatch ? parseFloat(offerMatch[1]) : null;
+
       inboxMessages.push({
         id: evt.id,
         from: evt.pubkey,
         content: plaintext,
         created_at: evt.created_at,
         listingId: tagVal(evt.tags || [], "e"),
+        offerGbp,
         read: false
       });
       inboxMessages.sort((a,b)=> b.created_at - a.created_at);
@@ -2248,12 +2338,12 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     el.innerHTML = mine.map(l=>{
       const applications = messagesByListing[l.id] || [];
       const unread = applications.filter(m=>!m.read).length;
-      const closed = l.status === "inactive";
+      const statusLabel = l.status === "inactive" ? "Closed" : l.status === "in-progress" ? "In progress" : "Active";
       return `
         <div class="inbox-item${unread ? " unread" : ""}" style="cursor:pointer;" data-listing-id="${l.id}">
           <div class="inbox-meta">
             <span>${escapeHtml(l.title)}${unread ? '<span class="unread-dot"></span>' : ""}</span>
-            <span>${closed ? "Closed" : "Active"}</span>
+            <span>${statusLabel}</span>
           </div>
           <div class="inbox-body">${formatPriceLine(l)} · ${catLabel(l.category)}${applications.length ? ` · ${applications.length} application${applications.length===1?"":"s"}` : " · No applications yet"}</div>
         </div>
@@ -2319,13 +2409,16 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   function renderJobDetailPostedView(listing){
     document.getElementById("jobdetail-title").textContent = listing.title;
     const body = document.getElementById("jobdetail-body");
-    const applications = inboxMessages.filter(m=>m.listingId===listing.id);
+    const applications = sortApplications(inboxMessages.filter(m=>m.listingId===listing.id));
     const closed = listing.status === "inactive";
+    const hired = listing.status === "in-progress";
+    const statusLabel = closed ? "Closed" : hired ? "In progress" : "Active";
+    const now = Math.floor(Date.now()/1000);
 
     body.innerHTML = `
       ${renderMediaGallery(listing.media)}
       <div class="plain-note" style="margin-bottom:16px;">
-        <strong>${escapeHtml(listing.title)}</strong> · ${closed ? "Closed" : "Active"}<br>
+        <strong>${escapeHtml(listing.title)}</strong> · ${statusLabel}<br>
         ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}<br>
         ${(listing.methods||[]).map(m=>METHOD_LABEL[m]||m).join(", ")}<br><br>
         ${escapeHtml(listing.desc)}
@@ -2335,6 +2428,12 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         ${!closed ? `<button type="button" class="btn btn-ghost" id="jd-close-btn" style="flex:1; justify-content:center; color:var(--ink); border-color:var(--line);">Close listing</button>` : ""}
       </div>
       <div class="section-label" style="border:none;">Applications (${applications.length})</div>
+      ${applications.length > 1 ? `
+      <div class="sort-toggle" role="group" aria-label="Sort applications" style="margin-bottom:12px;">
+        <button type="button" class="jd-app-sort-btn${applicationSortMode==="recency"?" active":""}" data-mode="recency">Recency</button>
+        <button type="button" class="jd-app-sort-btn${applicationSortMode==="price"?" active":""}" data-mode="price">Price</button>
+        <button type="button" class="jd-app-sort-btn${applicationSortMode==="rating"?" active":""}" data-mode="rating">Rating</button>
+      </div>` : ""}
       <div id="jd-applications"></div>
     `;
 
@@ -2342,25 +2441,51 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     if(applications.length === 0){
       appsEl.innerHTML = `<div class="plain-note">No applications yet.</div>`;
     } else {
-      appsEl.innerHTML = applications.map((m,i)=>`
+      appsEl.innerHTML = applications.map((m,i)=>{
+        const accepted = listing.acceptedPubkey === m.from;
+        const expired = !closed && !hired && (now - m.created_at) > APPLICATION_EXPIRY_SECONDS;
+        const offerBadge = m.offerGbp!=null ? `<span class="offer-tag">£${m.offerGbp}</span>` : "";
+        const acceptedBadge = accepted ? `<span class="trust-tag">✓ Accepted</span>` : "";
+        const expiredBadge = expired ? `<span class="demo-tag">Expired</span>` : "";
+        // once someone's accepted, only that applicant can still be rated once the job closes —
+        // before an Accept exists (older listings, or a poster who just closes without one) fall
+        // back to allowing any applicant, same as before this feature existed
+        const canRate = closed && (!listing.acceptedPubkey || accepted);
+        return `
         <div class="inbox-item${m.read ? "" : " unread"}">
           <div class="inbox-meta">
-            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
-            <span>${formatRelativeTime(m.created_at)}</span>
+            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${acceptedBadge}${expiredBadge}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${offerBadge} ${formatRelativeTime(m.created_at)}</span>
           </div>
           <div class="inbox-body">${escapeHtml(m.content)}</div>
-          ${closed ? `<div class="rating-widget" data-app-idx="${i}"></div>` : ""}
+          ${listing.status === "active" ? `<button type="button" class="btn btn-ghost jd-accept-btn" data-app-idx="${i}" style="margin-top:10px; width:100%; justify-content:center; color:var(--ink); border-color:var(--line);">Accept this offer</button>` : ""}
+          ${canRate ? `<div class="rating-widget" data-app-idx="${i}"></div>` : ""}
         </div>
-      `).join("");
-      if(closed){
-        appsEl.querySelectorAll(".rating-widget").forEach(el=>{
-          const m = applications[parseInt(el.dataset.appIdx, 10)];
-          renderRatingWidget(el, m.from, listing.id, "tasker");
+      `;
+      }).join("");
+      appsEl.querySelectorAll(".rating-widget").forEach(el=>{
+        const m = applications[parseInt(el.dataset.appIdx, 10)];
+        renderRatingWidget(el, m.from, listing.id, "tasker");
+      });
+      appsEl.querySelectorAll(".jd-accept-btn").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const m = applications[parseInt(btn.dataset.appIdx, 10)];
+          btn.disabled = true;
+          btn.textContent = "Accepting…";
+          await handleAcceptApplicant(listing, m);
+          renderJobDetailPostedView(listing);
         });
-      }
+      });
     }
     markMessagesRead(applications);
     renderMyJobsPosted();
+
+    document.querySelectorAll(".jd-app-sort-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        applicationSortMode = btn.dataset.mode;
+        renderJobDetailPostedView(listing);
+      });
+    });
 
     document.getElementById("jd-edit-btn").addEventListener("click", ()=> renderJobDetailEditView(listing));
     const closeBtn = document.getElementById("jd-close-btn");
@@ -2536,12 +2661,19 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     const thread = [...mine, ...theirs].sort((a,b)=>a.at-b.at);
 
     const posterClosed = listing ? listing.status === "inactive" : true; // unknown listing (fell off the relay feed) — allow rating rather than block it
+    const acceptedMe = listing && listing.acceptedPubkey === currentUser.pubkey;
+    const acceptedSomeoneElse = listing && listing.acceptedPubkey && !acceptedMe;
+    // once the poster's accepted someone, only that applicant rates them once the job closes —
+    // mirrors the same fallback as the posted view for listings that never went through Accept
+    const canRatePoster = posterClosed && (!listing || !listing.acceptedPubkey || acceptedMe);
 
     body.innerHTML = `
       ${listing ? renderMediaGallery(listing.media) : ""}
+      ${acceptedMe ? `<div class="plain-note" style="margin-bottom:16px;"><strong>🎉 You got this job!</strong> Message the poster here to sort out the details.</div>` : ""}
+      ${acceptedSomeoneElse ? `<div class="plain-note" style="margin-bottom:16px;">This job went to another applicant.</div>` : ""}
       ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(app.posterPubkey)}</div>` : ""}
       <div id="jd-thread"></div>
-      ${posterClosed ? `<div id="jd-rate-poster"></div>` : ""}
+      ${canRatePoster ? `<div id="jd-rate-poster"></div>` : ""}
       <div class="field" style="margin-top:16px;">
         <label for="jd-reply-message">Send a follow-up message</label>
         <textarea id="jd-reply-message" placeholder="Add more detail, ask a question…"></textarea>
@@ -2549,7 +2681,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       <button class="btn btn-primary" id="jd-send-reply" style="width:100%; justify-content:center;">Send message</button>
       <div class="notice" id="jd-reply-status" style="display:none; margin-top:14px;"></div>
     `;
-    if(posterClosed) renderRatingWidget(document.getElementById("jd-rate-poster"), app.posterPubkey, app.listingId, "poster");
+    if(canRatePoster) renderRatingWidget(document.getElementById("jd-rate-poster"), app.posterPubkey, app.listingId, "poster");
 
     document.getElementById("jd-thread").innerHTML = thread.map(m=>`
       <div class="inbox-item${m.read ? "" : " unread"}">
@@ -2610,6 +2742,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       const latTag = tagVal(tags,"lat"), lonTag = tagVal(tags,"lon");
       const dtag = tagVal(tags,"d") || evt.id;
       const status = tagVal(tags,"status") || "active";
+      const acceptedPubkey = tagVal(tags,"accepted") || null;
       const media = tags.filter(t=>t[0]==="imeta").map(t=>{
         const fields = {};
         t.slice(1).forEach(entry=>{
@@ -2623,7 +2756,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         // kind:30402 listings are addressable (replaceable) by (pubkey, d-tag), not by event id —
         // a republished/closed listing gets a new evt.id but the same d-tag, so the id used here
         // must be pubkey+d-tag or a "closed" replacement looks like a brand-new listing
-        id: evt.pubkey + ":" + dtag, dtag, status, created_at: evt.created_at,
+        id: evt.pubkey + ":" + dtag, dtag, status, acceptedPubkey, created_at: evt.created_at,
         title, category, location, price, media,
         methods: methods.length ? methods : (lnaddr ? ["lightning"] : ["cash"]),
         desc: evt.content || "", lnaddr, demo:false, pubkey: evt.pubkey,
