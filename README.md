@@ -10,6 +10,7 @@ stakrabbit is a decentralized classifieds board built on the [Nostr](https://nos
 - **Post a job** — title, category, location, price, accepted payment methods (cash / bank transfer / Lightning), description, and optional photos, audio, or video
 - **Apply for a job** — sends an end-to-end encrypted direct message to the poster, with a threaded conversation you can keep replying to
 - **My Jobs** — one place to see everything you've posted (with status and applications received) and everything you've applied to (with replies), including an edit view for your own listings
+- **Reputation** — once a job is closed, poster and tasker can rate each other 1-5 stars with an optional short review. Ratings are signed Nostr events, not rows in a database, so they follow a pubkey to any compatible client, not just stakrabbit
 - **Log in with a Nostr key** — connect a browser extension (e.g. [Alby](https://getalby.com/)), generate a brand-new key in-browser, or import an existing one. Locally-generated keys can be encrypted at rest with a passphrase.
 - **Live currency conversion** — prices are entered in GBP and converted for display based on your detected location
 - **Media attachments** — photos/audio/video upload to a [Blossom](https://github.com/hzrd149/blossom) media server and attach to your listing
@@ -34,6 +35,7 @@ There's no backend server or database. Instead:
 - **Listings** are published as [NIP-99](https://github.com/nostr-protocol/nips/blob/master/99.md) classified-listing events on public Nostr relays, tagged so the app can find them.
 - **Applications and replies** are encrypted Nostr direct messages between the applicant and the poster.
 - **Media** (photos, audio, video) is uploaded to a Blossom server and referenced by URL from the listing.
+- **Ratings** are [NIP-32](https://github.com/nostr-protocol/nips/blob/master/32.md) label events on the same public relays — aggregated client-side from whatever ratings a pubkey has received, not stored or computed by any server.
 - **Accounts** are just Nostr keypairs — there's no username/password system, no server-side accounts, and no company that can lock you out or lose your data.
 
 Because everything lives on the Nostr network, anyone running a compatible client can see and interact with the same listings — stakrabbit is a view into that shared network, not a walled garden.

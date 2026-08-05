@@ -282,6 +282,18 @@
     background:var(--mist); color:var(--moss-dark);
     white-space:nowrap;
   }
+  .rating-tag{
+    font-family:'Spline Sans Mono', monospace; font-size:10.5px;
+    padding:4px 8px; border-radius:4px;
+    background:var(--gold-soft); color:#7A4200;
+    white-space:nowrap;
+  }
+  .star-picker{ display:flex; gap:4px; }
+  .star-btn{
+    background:none; border:none; cursor:pointer; padding:2px;
+    font-size:22px; line-height:1; color:var(--line);
+  }
+  .star-btn.active{ color:var(--gold); }
   .method-tag{
     font-family:'Spline Sans Mono', monospace; font-size:10px;
     padding:3px 7px; border-radius:4px;
@@ -848,6 +860,10 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
 (function(){
   const RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]; // network endpoints
   const FEED_TAG = "satrabbit";
+  // NIP-32 label namespace for reputation events (kind 1985) — see "Reputation" in CLAUDE.md.
+  // Reusing NIP-32 rather than inventing a bespoke kind means any Nostr client that already
+  // understands labels can display these, not just this app.
+  const RATING_NAMESPACE = "com.stakrabbit.rating";
 
   const CATEGORIES = [
     { slug:"gardening",  label:"Gardening & lawns" },
@@ -881,6 +897,10 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // so a grid re-render triggered by an unrelated incoming relay event (which rebuilds every card)
   // doesn't silently drop the confirmation the user is mid-click on
   let myApplications = []; // jobs currentUser has applied to: { listingId, listingTitle, posterPubkey, message, sentAt }
+  // signed kind:1985 rating events seen from relays — unlike applications these are public and
+  // unencrypted, so (unlike myApplications) they don't need local persistence: a fresh relay
+  // subscription reconstructs them on any device. { id, from, ratedPubkey, listingId, rating, content, created_at }
+  let ratingEvents = [];
 
   // ---------- proximity state ----------
   let refCoords = null;     // { lat, lon } — the point we're measuring distance from
@@ -1054,6 +1074,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         const posterListingCount = l.pubkey ? (pubkeyCounts[l.pubkey]||0) : 0;
         const trustBadge = posterListingCount > 1
           ? `<span class="trust-tag">${posterListingCount} listings from this poster</span>` : "";
+        const repBadge = renderReputationBadge(l.pubkey);
         const isOwner = currentUser && l.pubkey === currentUser.pubkey;
         const confirmingClose = isOwner && pendingCloseConfirms.has(l.id);
         const actionLabel = isOwner ? (confirmingClose ? "Confirm close?" : "Close listing") : "Apply";
@@ -1069,6 +1090,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
             <span class="cat-tag">${catLabel(l.category)}</span>
             <div style="display:flex; gap:6px;">
               ${distBadge}
+              ${repBadge}
               ${trustBadge}
               ${mediaBadge}
               ${l.demo ? '<span class="demo-tag">Demo</span>' : ''}
@@ -1967,6 +1989,8 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         const sub = ["REQ", "satrabbit-feed", { kinds:[30402], "#t":[FEED_TAG], limit:50 }];
         ws.send(JSON.stringify(sub));
         sendInboxSubscription(ws);
+        const ratingsSub = ["REQ", "satrabbit-ratings", { kinds:[1985], "#L":[RATING_NAMESPACE], limit:500 }];
+        ws.send(JSON.stringify(ratingsSub));
       });
 
       ws.addEventListener("message", (msg)=>{
@@ -2002,6 +2026,8 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
               }
             } else if(evt.kind === 4){
               handleIncomingDM(evt);
+            } else if(evt.kind === 1985){
+              handleIncomingRating(evt);
             }
           } else if(data[0] === "OK" && data[1]){
             handlePublishAck(data[1], !!data[2]);
@@ -2059,6 +2085,113 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     let changed = false;
     messages.forEach(m=>{ if(!m.read){ m.read = true; changed = true; } });
     if(changed) updateAuthUI();
+  }
+
+  // ---------- reputation (NIP-32 label events, kind 1985, namespace RATING_NAMESPACE) ----------
+  // Watch out: nothing here stops someone spinning up a fresh pubkey and rating themselves —
+  // real sybil resistance would mean only counting ratings tied to a job whose payment actually
+  // settled (see the escrow write-up), which this app doesn't implement yet. Treat these scores
+  // as a lightweight social signal, not a verified guarantee.
+  function handleIncomingRating(evt){
+    if(ratingEvents.find(r=>r.id===evt.id)) return;
+    const tags = evt.tags || [];
+    if(tagVal(tags, "L") !== RATING_NAMESPACE) return;
+    const ratedPubkey = tagVal(tags, "p");
+    const ratingTag = tags.find(t=>t[0]==="l" && t[2]===RATING_NAMESPACE);
+    const rating = ratingTag ? parseInt(ratingTag[1], 10) : NaN;
+    if(!ratedPubkey || !(rating>=1 && rating<=5)) return;
+
+    ratingEvents.push({
+      id: evt.id, from: evt.pubkey, ratedPubkey,
+      listingId: tagVal(tags, "e"), rating, content: evt.content || "",
+      created_at: evt.created_at
+    });
+    // reputation badges show on the board (renderGrid) unconditionally, same as listings themselves;
+    // My Jobs only re-renders while it's the open drawer, same reasoning as handleIncomingDM above
+    renderGrid();
+    if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+  }
+
+  function getReputation(pubkey){
+    if(!pubkey) return null;
+    const mine = ratingEvents.filter(r=>r.ratedPubkey===pubkey);
+    if(!mine.length) return null;
+    const sum = mine.reduce((s,r)=>s+r.rating, 0);
+    return { avg: sum/mine.length, count: mine.length };
+  }
+
+  function renderReputationBadge(pubkey){
+    const rep = getReputation(pubkey);
+    return rep ? `<span class="rating-tag">⭐ ${rep.avg.toFixed(1)} (${rep.count})</span>` : "";
+  }
+
+  function alreadyRated(raterPubkey, ratedPubkey, listingId){
+    return ratingEvents.some(r=>r.from===raterPubkey && r.ratedPubkey===ratedPubkey && r.listingId===listingId);
+  }
+
+  // Renders (into containerEl) either a "you already rated this" note, or a 1-5 star picker +
+  // optional review text that signs and publishes a kind:1985 rating event on submit.
+  function renderRatingWidget(containerEl, ratedPubkey, listingId, roleLabel){
+    if(!containerEl || !currentUser || ratedPubkey === currentUser.pubkey) return;
+    if(alreadyRated(currentUser.pubkey, ratedPubkey, listingId)){
+      containerEl.innerHTML = `<div class="plain-note" style="margin-top:8px;">You've rated this ${roleLabel}.</div>`;
+      return;
+    }
+    containerEl.innerHTML = `
+      <div class="field" style="margin-top:8px; margin-bottom:0;">
+        <label>Rate this ${roleLabel}</label>
+        <div class="star-picker" data-value="0">
+          ${[1,2,3,4,5].map(n=>`<button type="button" class="star-btn" data-n="${n}" aria-label="${n} star${n===1?"":"s"}">★</button>`).join("")}
+        </div>
+        <textarea class="rating-review-text" placeholder="Optional short review…" style="margin-top:8px;"></textarea>
+        <button type="button" class="btn btn-primary rating-submit-btn" style="margin-top:8px; width:100%; justify-content:center;" disabled>Submit rating</button>
+        <div class="notice rating-status" style="display:none; margin-top:8px;"></div>
+      </div>
+    `;
+    const picker = containerEl.querySelector(".star-picker");
+    const submitBtn = containerEl.querySelector(".rating-submit-btn");
+    const statusEl = containerEl.querySelector(".rating-status");
+
+    picker.querySelectorAll(".star-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const n = parseInt(btn.dataset.n, 10);
+        picker.dataset.value = String(n);
+        picker.querySelectorAll(".star-btn").forEach(b=> b.classList.toggle("active", parseInt(b.dataset.n,10) <= n));
+        submitBtn.disabled = false;
+      });
+    });
+
+    submitBtn.addEventListener("click", async ()=>{
+      const n = parseInt(picker.dataset.value, 10);
+      if(!(n>=1 && n<=5)) return;
+      submitBtn.disabled = true;
+      statusEl.style.display = "block";
+      statusEl.classList.remove("good");
+      statusEl.textContent = "Publishing…";
+      try{
+        const reviewText = containerEl.querySelector(".rating-review-text").value.trim();
+        const signed = await signAndPublish({
+          kind: 1985,
+          tags: [
+            ["L", RATING_NAMESPACE],
+            ["l", String(n), RATING_NAMESPACE],
+            ["p", ratedPubkey],
+            // reuses the app's existing "e"-tag-as-listing-reference convention (listing.id, not
+            // a raw event id) — see eventToListing's note on why d-tag-based ids stay stable
+            // across edits, same reasoning sendApplication already relies on for DM threading
+            ["e", listingId]
+          ],
+          content: reviewText
+        });
+        ratingEvents.push({ id:signed.id, from:currentUser.pubkey, ratedPubkey, listingId, rating:n, content:reviewText, created_at:signed.created_at });
+        renderRatingWidget(containerEl, ratedPubkey, listingId, roleLabel);
+        renderGrid();
+      }catch(e){
+        console.error(e);
+        statusEl.textContent = "Couldn't publish the rating: " + (e.message || "unknown error");
+        submitBtn.disabled = false;
+      }
+    });
   }
 
   function formatRelativeTime(unixSeconds){
@@ -2209,15 +2342,22 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     if(applications.length === 0){
       appsEl.innerHTML = `<div class="plain-note">No applications yet.</div>`;
     } else {
-      appsEl.innerHTML = applications.map(m=>`
+      appsEl.innerHTML = applications.map((m,i)=>`
         <div class="inbox-item${m.read ? "" : " unread"}">
           <div class="inbox-meta">
-            <span>${shortNpub(nip19.npubEncode(m.from))}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
             <span>${formatRelativeTime(m.created_at)}</span>
           </div>
           <div class="inbox-body">${escapeHtml(m.content)}</div>
+          ${closed ? `<div class="rating-widget" data-app-idx="${i}"></div>` : ""}
         </div>
       `).join("");
+      if(closed){
+        appsEl.querySelectorAll(".rating-widget").forEach(el=>{
+          const m = applications[parseInt(el.dataset.appIdx, 10)];
+          renderRatingWidget(el, m.from, listing.id, "tasker");
+        });
+      }
     }
     markMessagesRead(applications);
     renderMyJobsPosted();
@@ -2395,10 +2535,13 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     const theirs = theirsRaw.map(m=>({ from:"them", content:m.content, at:m.created_at, read:m.read }));
     const thread = [...mine, ...theirs].sort((a,b)=>a.at-b.at);
 
+    const posterClosed = listing ? listing.status === "inactive" : true; // unknown listing (fell off the relay feed) — allow rating rather than block it
+
     body.innerHTML = `
       ${listing ? renderMediaGallery(listing.media) : ""}
-      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}</div>` : ""}
+      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(app.posterPubkey)}</div>` : ""}
       <div id="jd-thread"></div>
+      ${posterClosed ? `<div id="jd-rate-poster"></div>` : ""}
       <div class="field" style="margin-top:16px;">
         <label for="jd-reply-message">Send a follow-up message</label>
         <textarea id="jd-reply-message" placeholder="Add more detail, ask a question…"></textarea>
@@ -2406,6 +2549,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       <button class="btn btn-primary" id="jd-send-reply" style="width:100%; justify-content:center;">Send message</button>
       <div class="notice" id="jd-reply-status" style="display:none; margin-top:14px;"></div>
     `;
+    if(posterClosed) renderRatingWidget(document.getElementById("jd-rate-poster"), app.posterPubkey, app.listingId, "poster");
 
     document.getElementById("jd-thread").innerHTML = thread.map(m=>`
       <div class="inbox-item${m.read ? "" : " unread"}">

@@ -59,6 +59,18 @@ No framework — every `render*()` function rebuilds the relevant DOM subtree vi
 - Drawers share `openDrawer()`/`closeDrawers()`, which also handle focus management (focus moves into the drawer on open, returns to the trigger element on close) and Escape-to-close.
 - Leaflet (map view) is not loaded until the user first switches to Map view (`loadLeaflet()`) — it used to be a render-blocking `<script>` in `<head>` loaded on every visit regardless of whether Map view was ever used.
 
+### Reputation
+
+Ratings are [NIP-32](https://github.com/nostr-protocol/nips/blob/master/32.md) label events (`kind: 1985`), namespaced with `["L", RATING_NAMESPACE]` (`com.stakrabbit.rating`) so the feed can tell our ratings apart from any other use of kind 1985. This reuses an existing NIP rather than inventing a bespoke kind for the same reason listings use NIP-99 and media uses NIP-92: any Nostr client that already understands labels can display them, not just this app.
+
+A rating event tags `["p", ratedPubkey]` (who's being rated) and `["e", listingId]` (which job, using the app's existing `pubkey:dtag` listing-id convention — see the addressable-event note above — not a raw event id). The rater/ratee direction is implicit: `evt.pubkey` is always the rater, the `p` tag is always the ratee. `handleIncomingRating()` validates the namespace and a 1-5 numeric rating before accepting an event into `ratingEvents`; `getReputation()` aggregates client-side (average + count) for a given pubkey on demand — there's no server-computed score anywhere.
+
+Unlike applications, rating events are public and unencrypted, so `ratingEvents` doesn't need local persistence the way `myApplications` does — a fresh relay subscription (`satrabbit-ratings` in `connectRelays()`) reconstructs the full picture on any device.
+
+`renderRatingWidget()` is the shared submit UI (1-5 stars + optional short text), used from both `renderJobDetailPostedView()` (poster rates each applicant) and `renderJobDetailAppliedView()` (tasker rates the poster). Both gate on the listing being closed, as the closest proxy this app has for "job completed" — there's no separate "hire" step that records which applicant actually did the job, so a poster can rate any applicant they choose to.
+
+**Sybil caveat:** nothing here stops a fresh pubkey from rating itself, or two colluding pubkeys from trading fake 5-star ratings — real sybil resistance would mean only counting a rating if it's tied to a job whose payment actually settled (see the escrow write-up), which this app doesn't implement. Treat scores as a lightweight social signal, not a verified guarantee.
+
 ### Currency and location
 
 Prices are stored in GBP (`listing.price.gbp`) and converted for display only. On load, IP geolocation via `ipapi.co` sets the display currency; browser geolocation or a manual location search (reverse-)geocoded via Nominatim (`nominatim.openstreetmap.org`) can override it. Country → currency mapping is the hardcoded `COUNTRY_CURRENCY` table; the GBP→target FX rate comes from `frankfurter.app`. "Nearest" sort is disabled until a location reference (`refCoords`) exists.
@@ -68,3 +80,5 @@ Prices are stored in GBP (`listing.price.gbp`) and converted for display only. O
 - Applications/message threads are local-only (see above) — no cross-device sync.
 - DMs use NIP-04, which encrypts content but not metadata (relays can see who's messaging whom, and when) — NIP-17 would close that gap but isn't implemented.
 - No pagination — the relay subscription fetches up to 50 listings; older ones fall off.
+- Ratings aren't sybil-resistant (see "Reputation" above) — they're not gated on a real settled payment, so a determined bad actor can rate themselves or a colluding pubkey.
+- No formal "hire" step — rating gates on the listing being closed, not on a specific applicant being marked as the one who did the job.
