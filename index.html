@@ -32,6 +32,11 @@
     min-height:100vh;
   }
   ::selection{ background:var(--gold-soft); color:var(--ink); }
+  /* nostr-login's own persistent floating icon — its `data-no-banner` option would suppress this,
+     but also breaks its connect dialog when triggered via nlLaunch (confirmed in testing, see
+     CLAUDE.md). Hiding the host element ourselves and only revealing it during an active connect
+     attempt (see the auth-connect-remote handler) sidesteps that bug entirely. */
+  nl-banner{ display:none !important; }
 
   .mono{ font-family:'Spline Sans Mono', monospace; }
   .display{ font-family:'Bricolage Grotesque', sans-serif; }
@@ -1247,6 +1252,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     inboxDrawer.classList.remove("show");
     myJobsDrawer.classList.remove("show");
     jobDetailDrawer.classList.remove("show");
+    hideRemoteSignerIcon(); // in case the login drawer's closed mid-connect-attempt
     if(lastFocusedBeforeDrawer && typeof lastFocusedBeforeDrawer.focus === "function"){
       lastFocusedBeforeDrawer.focus();
     }
@@ -1635,17 +1641,29 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // never appears and nostr-login only logs the failure to console, with nothing shown to the
   // user. This timeout is our own fallback so a dead upstream doesn't leave the button looking
   // like it's doing something forever.
+  // the `nl-banner{ display:none !important; }` rule near the top of <style> hides nostr-login's
+  // own floating icon by default — these two just poke an inline override on/off around an actual
+  // connect attempt, since the icon and its on-demand dialog share the same host element
+  function showRemoteSignerIcon(){
+    document.querySelector("nl-banner")?.style.setProperty("display", "block", "important");
+  }
+  function hideRemoteSignerIcon(){
+    document.querySelector("nl-banner")?.style.removeProperty("display");
+  }
+
   let remoteLoginTimeout = null;
   document.getElementById("auth-connect-remote").addEventListener("click", ()=>{
     const status = document.getElementById("auth-remote-status");
     status.style.display = "block";
     status.classList.remove("good");
     status.textContent = "Opening connection dialog…";
+    showRemoteSignerIcon();
     document.dispatchEvent(new CustomEvent("nlLaunch", { detail: "login" }));
     clearTimeout(remoteLoginTimeout);
     remoteLoginTimeout = setTimeout(()=>{
       if(currentUser) return;
       status.textContent = "Couldn't open the connection dialog — the remote signer's discovery service may be unreachable right now. Try again in a moment, or use Extension / Create account / I have a key instead.";
+      hideRemoteSignerIcon();
     }, 10000);
   });
 
@@ -1655,6 +1673,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   document.addEventListener("nlAuth", async (e)=>{
     if(currentUser || !(e.detail?.type === "login" || e.detail?.type === "signup")) return;
     clearTimeout(remoteLoginTimeout);
+    hideRemoteSignerIcon();
     try{
       const pubkey = await window.nostr.getPublicKey();
       logIn({ method:"nip07", viaNostrLogin:true, pubkey, npub: nip19.npubEncode(pubkey) });
