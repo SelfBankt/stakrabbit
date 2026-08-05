@@ -870,6 +870,13 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // Reusing NIP-32 rather than inventing a bespoke kind means any Nostr client that already
   // understands labels can display these, not just this app.
   const RATING_NAMESPACE = "com.stakrabbit.rating";
+  // Tier 2 ("vouched") of the light-touch verification ladder — see "Verification tiers" in
+  // CLAUDE.md. Tier 1 (phone/OTP) needs a real backend to issue and check a code (even Nostr's
+  // own OTP-over-DM convention does) and is deliberately not implemented here; Tier 3 (paid
+  // third-party ID checks) is out of scope entirely. Tier 0 is just "no vouch badge" — nothing
+  // to build, that's already how every pubkey starts.
+  const VOUCH_NAMESPACE = "com.stakrabbit.vouch";
+  const VOUCH_THRESHOLD = 2; // distinct vouchers needed before the "✓ Vouched" badge shows
   const APPLICATION_EXPIRY_SECONDS = 60*60*24*7; // 7 days — cosmetic staleness flag, doesn't hide or delete anything
 
   const CATEGORIES = [
@@ -909,6 +916,9 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   // unencrypted, so (unlike myApplications) they don't need local persistence: a fresh relay
   // subscription reconstructs them on any device. { id, from, ratedPubkey, listingId, rating, content, created_at }
   let ratingEvents = [];
+  // signed kind:1985 vouch events (Tier 2 verification) — same public/unencrypted reasoning as
+  // ratingEvents, so no local persistence needed either. { id, from, vouchedPubkey, created_at }
+  let vouchEvents = [];
 
   // ---------- proximity state ----------
   let refCoords = null;     // { lat, lon } — the point we're measuring distance from
@@ -1090,6 +1100,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         const trustBadge = posterListingCount > 1
           ? `<span class="trust-tag">${posterListingCount} listings from this poster</span>` : "";
         const repBadge = renderReputationBadge(l.pubkey);
+        const tierBadge = renderTierBadge(l.pubkey);
         const isOwner = currentUser && l.pubkey === currentUser.pubkey;
         const confirmingClose = isOwner && pendingCloseConfirms.has(l.id);
         const actionLabel = isOwner ? (confirmingClose ? "Confirm close?" : "Close listing") : "Apply";
@@ -1106,6 +1117,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
             <div style="display:flex; gap:6px;">
               ${distBadge}
               ${repBadge}
+              ${tierBadge}
               ${trustBadge}
               ${mediaBadge}
               ${l.demo ? '<span class="demo-tag">Demo</span>' : ''}
@@ -2072,8 +2084,8 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         const sub = ["REQ", "satrabbit-feed", { kinds:[30402], "#t":[FEED_TAG], limit:50 }];
         ws.send(JSON.stringify(sub));
         sendInboxSubscription(ws);
-        const ratingsSub = ["REQ", "satrabbit-ratings", { kinds:[1985], "#L":[RATING_NAMESPACE], limit:500 }];
-        ws.send(JSON.stringify(ratingsSub));
+        const labelsSub = ["REQ", "satrabbit-labels", { kinds:[1985], "#L":[RATING_NAMESPACE, VOUCH_NAMESPACE], limit:500 }];
+        ws.send(JSON.stringify(labelsSub));
       });
 
       ws.addEventListener("message", (msg)=>{
@@ -2110,7 +2122,11 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
             } else if(evt.kind === 4){
               handleIncomingDM(evt);
             } else if(evt.kind === 1985){
-              handleIncomingRating(evt);
+              // one shared subscription (satrabbit-labels) covers both label namespaces, so
+              // dispatch on the "L" tag rather than doubling up REQs for the same event kind
+              const namespace = tagVal(evt.tags || [], "L");
+              if(namespace === RATING_NAMESPACE) handleIncomingRating(evt);
+              else if(namespace === VOUCH_NAMESPACE) handleIncomingVouch(evt);
             }
           } else if(data[0] === "OK" && data[1]){
             handlePublishAck(data[1], !!data[2]);
@@ -2280,6 +2296,68 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         console.error(e);
         statusEl.textContent = "Couldn't publish the rating: " + (e.message || "unknown error");
         submitBtn.disabled = false;
+      }
+    });
+  }
+
+  // ---------- verification tiers (Tier 0: none, Tier 2: vouched — see CLAUDE.md) ----------
+  // Vouching isn't tied to a job or gated by the voucher's own tier (there's no Tier 1 population
+  // to draw from once phone verification is descoped) — any pubkey can vouch for any other, which
+  // is the same sybil trade-off as ratings: a lightweight social signal, not a verified guarantee.
+  function handleIncomingVouch(evt){
+    if(vouchEvents.find(v=>v.id===evt.id)) return;
+    const tags = evt.tags || [];
+    const vouchedPubkey = tagVal(tags, "p");
+    if(!vouchedPubkey) return;
+    vouchEvents.push({ id:evt.id, from:evt.pubkey, vouchedPubkey, created_at:evt.created_at });
+    renderGrid();
+    if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+  }
+
+  function getVouchCount(pubkey){
+    if(!pubkey) return 0;
+    return new Set(vouchEvents.filter(v=>v.vouchedPubkey===pubkey).map(v=>v.from)).size;
+  }
+
+  function renderTierBadge(pubkey){
+    return getVouchCount(pubkey) >= VOUCH_THRESHOLD ? `<span class="trust-tag">✓ Vouched</span>` : "";
+  }
+
+  function alreadyVouchedFor(voucherPubkey, vouchedPubkey){
+    return vouchEvents.some(v=>v.from===voucherPubkey && v.vouchedPubkey===vouchedPubkey);
+  }
+
+  // Simpler sibling of renderRatingWidget: a vouch is just a yes/no attestation, not a 1-5 score,
+  // and (unlike a rating) isn't gated on a job existing or closing — see the comment above.
+  function renderVouchWidget(containerEl, vouchedPubkey){
+    if(!containerEl || !currentUser || vouchedPubkey === currentUser.pubkey) return;
+    if(alreadyVouchedFor(currentUser.pubkey, vouchedPubkey)){
+      containerEl.innerHTML = `<div class="plain-note" style="margin-top:8px;">You've vouched for this person.</div>`;
+      return;
+    }
+    containerEl.innerHTML = `
+      <button type="button" class="btn btn-ghost vouch-btn" style="margin-top:8px; width:100%; justify-content:center; color:var(--ink); border-color:var(--line);">Vouch for this person</button>
+      <div class="notice vouch-status" style="display:none; margin-top:8px;"></div>
+    `;
+    const btn = containerEl.querySelector(".vouch-btn");
+    const statusEl = containerEl.querySelector(".vouch-status");
+    btn.addEventListener("click", async ()=>{
+      btn.disabled = true;
+      statusEl.style.display = "block";
+      statusEl.textContent = "Publishing…";
+      try{
+        const signed = await signAndPublish({
+          kind: 1985,
+          tags: [["L", VOUCH_NAMESPACE], ["l", "vouch", VOUCH_NAMESPACE], ["p", vouchedPubkey]],
+          content: ""
+        });
+        vouchEvents.push({ id:signed.id, from:currentUser.pubkey, vouchedPubkey, created_at:signed.created_at });
+        renderVouchWidget(containerEl, vouchedPubkey);
+        renderGrid();
+      }catch(e){
+        console.error(e);
+        statusEl.textContent = "Couldn't publish: " + (e.message || "unknown error");
+        btn.disabled = false;
       }
     });
   }
@@ -2454,15 +2532,20 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         return `
         <div class="inbox-item${m.read ? "" : " unread"}">
           <div class="inbox-meta">
-            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${acceptedBadge}${expiredBadge}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${renderTierBadge(m.from)}${acceptedBadge}${expiredBadge}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
             <span>${offerBadge} ${formatRelativeTime(m.created_at)}</span>
           </div>
           <div class="inbox-body">${escapeHtml(m.content)}</div>
           ${listing.status === "active" ? `<button type="button" class="btn btn-ghost jd-accept-btn" data-app-idx="${i}" style="margin-top:10px; width:100%; justify-content:center; color:var(--ink); border-color:var(--line);">Accept this offer</button>` : ""}
+          <div class="vouch-widget" data-app-idx="${i}"></div>
           ${canRate ? `<div class="rating-widget" data-app-idx="${i}"></div>` : ""}
         </div>
       `;
       }).join("");
+      appsEl.querySelectorAll(".vouch-widget").forEach(el=>{
+        const m = applications[parseInt(el.dataset.appIdx, 10)];
+        renderVouchWidget(el, m.from);
+      });
       appsEl.querySelectorAll(".rating-widget").forEach(el=>{
         const m = applications[parseInt(el.dataset.appIdx, 10)];
         renderRatingWidget(el, m.from, listing.id, "tasker");
@@ -2671,8 +2754,9 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       ${listing ? renderMediaGallery(listing.media) : ""}
       ${acceptedMe ? `<div class="plain-note" style="margin-bottom:16px;"><strong>🎉 You got this job!</strong> Message the poster here to sort out the details.</div>` : ""}
       ${acceptedSomeoneElse ? `<div class="plain-note" style="margin-bottom:16px;">This job went to another applicant.</div>` : ""}
-      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(app.posterPubkey)}</div>` : ""}
+      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(app.posterPubkey)}${renderTierBadge(app.posterPubkey)}</div>` : ""}
       <div id="jd-thread"></div>
+      <div id="jd-vouch-poster"></div>
       ${canRatePoster ? `<div id="jd-rate-poster"></div>` : ""}
       <div class="field" style="margin-top:16px;">
         <label for="jd-reply-message">Send a follow-up message</label>
@@ -2681,6 +2765,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       <button class="btn btn-primary" id="jd-send-reply" style="width:100%; justify-content:center;">Send message</button>
       <div class="notice" id="jd-reply-status" style="display:none; margin-top:14px;"></div>
     `;
+    renderVouchWidget(document.getElementById("jd-vouch-poster"), app.posterPubkey);
     if(canRatePoster) renderRatingWidget(document.getElementById("jd-rate-poster"), app.posterPubkey, app.listingId, "poster");
 
     document.getElementById("jd-thread").innerHTML = thread.map(m=>`
