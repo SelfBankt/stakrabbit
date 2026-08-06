@@ -1503,7 +1503,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       (applicantLnaddr ? `\n\nLightning address for payment: ${applicantLnaddr}` : "");
 
     try{
-      await sendEncryptedDM(listing.pubkey, content, [["e", listing.id]]);
+      await sendEncryptedDM(listing.pubkey, content, [["a", "30402:" + listing.id]]);
 
       status.classList.add("good");
       status.textContent = "Application sent as an encrypted direct message — the poster will see it in any Nostr DM client.";
@@ -2208,9 +2208,13 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     if(openSockets.length === 0){
       throw new Error("not connected to any relays");
     }
+    // registered *before* sending — a relay can reply with OK fast enough that if we sent first,
+    // its response would arrive before pendingPublishes even has an entry to record it against,
+    // and handlePublishAck() silently drops acks for unknown event ids
+    const confirmation = waitForPublishConfirmation(signed.id, openSockets.length);
     openSockets.forEach(ws => ws.send(JSON.stringify(["EVENT", signed])));
 
-    const accepted = await waitForPublishConfirmation(signed.id, openSockets.length);
+    const accepted = await confirmation;
     if(!accepted){
       throw new Error("no relay accepted the event");
     }
@@ -2374,7 +2378,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       await sendEncryptedDM(
         message.from,
         `Good news — you've been accepted for "${listing.title}"! Message here to sort out the details.`,
-        [["e", listing.id]]
+        [["a", "30402:" + listing.id]]
       );
     }catch(e){
       console.error(e);
@@ -2529,7 +2533,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         from: evt.pubkey,
         content: plaintext,
         created_at: evt.created_at,
-        listingId: tagVal(evt.tags || [], "e"),
+        listingId: listingIdFromATag(evt.tags || []),
         offerGbp,
         read: false
       });
@@ -2562,7 +2566,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
     ratingEvents.push({
       id: evt.id, from: evt.pubkey, ratedPubkey,
-      listingId: tagVal(tags, "e"), rating, content: evt.content || "",
+      listingId: listingIdFromATag(tags), rating, content: evt.content || "",
       created_at: evt.created_at
     });
     // reputation badges show on the board (renderGrid) unconditionally, same as listings themselves;
@@ -2635,10 +2639,9 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
             ["L", RATING_NAMESPACE],
             ["l", String(n), RATING_NAMESPACE],
             ["p", ratedPubkey],
-            // reuses the app's existing "e"-tag-as-listing-reference convention (listing.id, not
-            // a raw event id) — see eventToListing's note on why d-tag-based ids stay stable
-            // across edits, same reasoning sendApplication already relies on for DM threading
-            ["e", listingId]
+            // "a" tag, not "e" — listings are addressable, so this must be a "<kind>:<pubkey>:<d-tag>"
+            // reference, not a real event id (see listingIdFromATag)
+            ["a", "30402:" + listingId]
           ],
           content: reviewText
         });
@@ -3192,7 +3195,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       if(!text){ statusEl.textContent = "Write a message first."; return; }
 
       try{
-        await sendEncryptedDM(app.posterPubkey, text, [["e", app.listingId]]);
+        await sendEncryptedDM(app.posterPubkey, text, [["a", "30402:" + app.listingId]]);
         app.messages = app.messages || [];
         app.messages.push({ content:text, sentAt: Math.floor(Date.now()/1000) });
         saveMyApplications();
@@ -3209,6 +3212,18 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   function tagVal(tags, name){
     const t = tags.find(t=>t[0]===name);
     return t ? t[1] : null;
+  }
+
+  // Listings are addressable events (kind 30402), so referencing "which listing" from a DM or
+  // rating requires a NIP-01 "a" tag ("<kind>:<pubkey>:<d-tag>"), not an "e" tag — "e" tags must be
+  // a 32-byte hex event id, and strict relays reject anything else (confirmed: nos.lol/damus.io
+  // both rejected with "invalid: unexpected size for fixed-size tag: e" when this used to send
+  // listing.id, the app's own pubkey:d-tag composite, as an "e" tag value). This strips the kind
+  // prefix back off to recover that pubkey:d-tag id for the rest of the app to match against.
+  function listingIdFromATag(tags){
+    const a = tagVal(tags, "a") || "";
+    const idx = a.indexOf(":");
+    return idx === -1 ? null : a.slice(idx + 1);
   }
 
   function eventToListing(evt){
