@@ -22,7 +22,7 @@ self.addEventListener("activate", (event) => {
 
 // Only same-origin GET requests are handled here — relay websockets never go through fetch at
 // all, and cross-origin calls (Nostr relays' HTTP fallbacks, Nominatim, Blossom, ipapi.co,
-// frankfurter.app, CARTO tiles, esm.sh/unpkg scripts) pass straight through untouched rather than
+// frankfurter.app, CARTO tiles, esm.sh scripts) pass straight through untouched rather than
 // risking opaque-response caching weirdness.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);

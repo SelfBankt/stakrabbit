@@ -40,11 +40,6 @@
     min-height:100vh;
   }
   ::selection{ background:var(--gold-soft); color:var(--ink); }
-  /* nostr-login's own persistent floating icon — its `data-no-banner` option would suppress this,
-     but also breaks its connect dialog when triggered via nlLaunch (confirmed in testing, see
-     CLAUDE.md). Hiding the host element ourselves and only revealing it during an active connect
-     attempt (see the auth-connect-remote handler) sidesteps that bug entirely. */
-  nl-banner{ display:none !important; }
 
   .mono{ font-family:'Spline Sans Mono', monospace; }
   .display{ font-family:'Bricolage Grotesque', sans-serif; }
@@ -559,14 +554,51 @@
   }
   .account-chip .logout-x:hover{ color:var(--paper); }
 
-  .auth-tabs{ display:flex; gap:6px; margin-bottom:18px; }
-  .auth-tab{
-    flex:1; border:1px solid var(--line); background:#fff; border-radius:10px;
-    padding:9px 10px; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+  /* login drawer header: dark textured banner, modelled on plebeian.market's login dialog */
+  .drawer-head.auth-head{
+    background:var(--moss-dark); border-bottom:none; align-items:flex-start;
+    position:relative; overflow:hidden;
   }
-  .auth-tab.active{ background:var(--moss); color:var(--paper); border-color:var(--moss); }
+  .drawer-head.auth-head::before{
+    content:""; position:absolute; inset:0; opacity:0.5;
+    background-image:radial-gradient(circle, rgba(255,255,255,0.25) 1px, transparent 1px);
+    background-size:10px 10px;
+  }
+  .drawer-head.auth-head h2{ color:var(--paper); position:relative; }
+  .drawer-head.auth-head .auth-subtitle{
+    position:relative; margin:6px 0 0; font-size:13px; color:rgba(251,250,244,0.75);
+  }
+  .drawer-head.auth-head .close-x{ color:var(--paper); position:relative; }
+  .drawer-head.auth-head .close-x:hover{ background:rgba(255,255,255,0.15); }
+
+  /* top-level login tabs: equal-width underline style, not pill buttons */
+  .auth-tabs{ display:flex; border-bottom:1px solid var(--line); margin-bottom:18px; }
+  .auth-tab{
+    flex:1; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-1px;
+    padding:10px 4px; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+  }
+  .auth-tab:hover{ color:var(--moss); }
+  .auth-tab.active{ color:var(--moss); border-bottom-color:var(--moss); }
   .auth-panel{ display:none; }
   .auth-panel.active{ display:block; }
+
+  /* N-Connect sub-tabs (QR Code / Bunker URL): solid blocks, distinct from the underline tabs above */
+  .nconnect-subtabs{
+    display:flex; gap:1px; margin-bottom:16px; border-radius:10px;
+    overflow:hidden; border:1px solid var(--line);
+  }
+  .nconnect-subtab{
+    flex:1; background:var(--paper-2); border:none; padding:9px 10px;
+    font-size:12px; font-weight:600; color:var(--ink-soft);
+  }
+  .nconnect-subtab.active{ background:var(--moss); color:var(--paper); }
+  .nconnect-subpanel{ display:none; }
+  .nconnect-subpanel.active{ display:block; }
+  .nconnect-qr-wrap{ display:flex; flex-direction:column; align-items:center; gap:12px; padding:4px 0 6px; }
+  .nconnect-qr-wrap img{
+    width:220px; height:220px; max-width:100%; background:#fff;
+    border-radius:10px; border:1px solid var(--line); padding:10px;
+  }
 
   .key-warning{
     font-size:12.5px; line-height:1.6; padding:12px 13px;
@@ -580,23 +612,6 @@
   }
   .checkbox-row input{ margin-top:3px; }
 </style>
-<!-- nostr-login: adds a "remote signer" (NIP-46 bunker) login option. Restricted to just the
-     "connect" method — extension/generate-key/import already have their own tabs built directly
-     into this app's login drawer (below), and its OTP-via-DM method needs a backend this app
-     doesn't run (see CLAUDE.md's "Verification tiers" note on why phone/OTP was skipped too).
-     After connecting, window.nostr becomes a NIP-07-compatible provider, so nothing else in this
-     app's signing/DM code needs to change — see the nlAuth listener further down.
-     Deliberately NOT setting data-no-banner: with it set, the connect dialog nlLaunch is meant to
-     open never actually shows (the library's own no-banner mode leaves the whole thing — banner
-     AND dialog — under a "hidden" class that nlLaunch doesn't clear, confirmed in-browser against
-     nostr-login@latest). Its persistent floating icon is hidden by our own CSS instead (see
-     `nl-banner` in <style>) and only shown during an active connect attempt — see
-     showRemoteSignerIcon()/hideRemoteSignerIcon() in the module script below. -->
-<script src="https://www.unpkg.com/nostr-login@latest/dist/unpkg.js"
-  data-methods="connect"
-  data-bunkers="nsec.app"
-  data-perms="sign_event:30402,sign_event:4,sign_event:1985,sign_event:24242,nip04_encrypt,nip04_decrypt"
-></script>
 <script>
   // PWA: registers the app-shell cache from sw.js so the board loads offline after a first visit
   // and the site becomes installable. Deferred to "load" so it doesn't compete with anything the
@@ -832,22 +847,19 @@
 
 <!-- Auth drawer -->
 <div class="drawer" id="auth-drawer">
-  <div class="drawer-head">
-    <h2>Log in</h2>
+  <div class="drawer-head auth-head">
+    <div>
+      <h2>Log in</h2>
+      <p class="auth-subtitle">Choose your preferred login method below.</p>
+    </div>
     <button class="close-x" data-close aria-label="Close">✕</button>
   </div>
   <div class="drawer-body">
     <div class="auth-tabs" id="auth-tabs">
-      <button class="auth-tab active" data-auth="extension">Extension</button>
       <button class="auth-tab" data-auth="create">Create account</button>
-      <button class="auth-tab" data-auth="import">I have a key</button>
-      <button class="auth-tab" data-auth="remote">Remote signer</button>
-    </div>
-
-    <div class="auth-panel active" data-auth-panel="extension">
-      <p class="plain-note" style="margin-bottom:16px;">Use a Nostr browser extension (like Alby or nos2x) to log in with your existing identity — your private key stays on your device, not with us.</p>
-      <button class="btn btn-primary" id="auth-connect-extension" style="width:100%; justify-content:center;">Connect extension</button>
-      <div class="notice" id="auth-extension-status" style="display:none; margin-top:14px;"></div>
+      <button class="auth-tab active" data-auth="extension">Extension</button>
+      <button class="auth-tab" data-auth="nconnect">N-Connect</button>
+      <button class="auth-tab" data-auth="import">Private Key</button>
     </div>
 
     <div class="auth-panel" data-auth-panel="create">
@@ -877,6 +889,36 @@
       </div>
     </div>
 
+    <div class="auth-panel active" data-auth-panel="extension">
+      <p class="plain-note" style="margin-bottom:16px;">Use a Nostr browser extension (like Alby or nos2x) to log in with your existing identity — your private key stays on your device, not with us.</p>
+      <button class="btn btn-primary" id="auth-connect-extension" style="width:100%; justify-content:center;">Connect extension</button>
+      <div class="notice" id="auth-extension-status" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <div class="auth-panel" data-auth-panel="nconnect">
+      <div class="nconnect-subtabs" id="nconnect-subtabs">
+        <button class="nconnect-subtab active" data-nconnect="qr">QR Code</button>
+        <button class="nconnect-subtab" data-nconnect="bunker">Bunker URL</button>
+      </div>
+
+      <div class="nconnect-subpanel active" data-nconnect-panel="qr">
+        <p class="plain-note" style="margin-bottom:14px;">Scan this with a remote signer app — <a href="https://nsec.app" target="_blank" rel="noopener noreferrer">nsec.app</a>, or on Android, <a href="https://github.com/greenart7c3/Amber" target="_blank" rel="noopener noreferrer">Amber</a>'s "Nostr Connect" screen. It holds your key and approves each signature, so it never touches this browser at all.</p>
+        <div class="nconnect-qr-wrap" id="nconnect-qr-wrap">
+          <div class="notice" id="nconnect-qr-status">Generating connection code…</div>
+        </div>
+      </div>
+
+      <div class="nconnect-subpanel" data-nconnect-panel="bunker">
+        <p class="plain-note" style="margin-bottom:14px;">Paste the bunker:// connection string from your remote signer's "Nostr Connect" screen.</p>
+        <div class="field">
+          <label for="f-bunker-url">Bunker URL</label>
+          <input id="f-bunker-url" class="mono" placeholder="bunker://…">
+        </div>
+        <button class="btn btn-primary" id="auth-connect-bunker" style="width:100%; justify-content:center;">Connect</button>
+        <div class="notice" id="auth-bunker-status" style="display:none; margin-top:14px;"></div>
+      </div>
+    </div>
+
     <div class="auth-panel" data-auth-panel="import">
       <div class="field">
         <label for="f-import-key">Private key (nsec or hex)</label>
@@ -888,12 +930,6 @@
       </div>
       <button class="btn btn-primary" id="auth-import-key" style="width:100%; justify-content:center;">Log in</button>
       <div class="notice" id="auth-import-status" style="display:none; margin-top:14px;"></div>
-    </div>
-
-    <div class="auth-panel" data-auth-panel="remote">
-      <p class="plain-note" style="margin-bottom:16px;">Connect a remote signer (a "bunker") — it holds your key and approves each signature, so it never touches this browser at all. On Android, open <a href="https://github.com/greenart7c3/Amber" target="_blank" rel="noopener noreferrer">Amber</a> and use its "Nostr Connect" screen to get a connection string or QR code; on any device, <a href="https://nsec.app" target="_blank" rel="noopener noreferrer">nsec.app</a> works the same way.</p>
-      <button class="btn btn-primary" id="auth-connect-remote" style="width:100%; justify-content:center;">Connect remote signer</button>
-      <div class="notice" id="auth-remote-status" style="display:none; margin-top:14px;"></div>
     </div>
 
     <div class="auth-panel" data-auth-panel="unlock">
@@ -912,6 +948,8 @@
 <script type="module">
 import { generateSecretKey, getPublicKey, finalizeEvent, nip19 } from "https://esm.sh/nostr-tools@2";
 import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
+import { BunkerSigner, parseBunkerInput, createNostrConnectURI } from "https://esm.sh/nostr-tools@2/nip46";
+import QRCode from "https://esm.sh/qrcode@1.5.3";
 (function(){
   const RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]; // network endpoints
   const FEED_TAG = "satrabbit";
@@ -1272,7 +1310,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     inboxDrawer.classList.remove("show");
     myJobsDrawer.classList.remove("show");
     jobDetailDrawer.classList.remove("show");
-    hideRemoteSignerIcon(); // in case the login drawer's closed mid-connect-attempt
+    abortNConnectQR(); // in case the login drawer's closed mid-connect-attempt
     if(lastFocusedBeforeDrawer && typeof lastFocusedBeforeDrawer.focus === "function"){
       lastFocusedBeforeDrawer.focus();
     }
@@ -1445,7 +1483,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
 
   // ---------- account / auth ----------
   const AUTH_STORAGE_KEY = "stakrabbit_auth_v1";
-  let currentUser = null; // { method:"nip07"|"local", pubkey, npub, secretKey?, encrypted?, viaNostrLogin? }
+  let currentUser = null; // { method:"nip07"|"local", pubkey, npub, secretKey?, encrypted?, viaBunker?, bunkerClientSecret?, bunkerPointer? }
   let lockedAccount = null; // { pubkey, npub, salt, iv, ciphertext } — passphrase-protected key not yet unlocked this page load
 
   function bytesToHex(bytes){
@@ -1507,10 +1545,16 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   function saveSession(){
     if(!currentUser){ localStorage.removeItem(AUTH_STORAGE_KEY); return; }
     const payload = { method: currentUser.method, pubkey: currentUser.pubkey };
-    // tracked so logOut() knows to also tear down the underlying bunker connection after a
-    // reload — without this, nostr-login could silently reconnect a session the user logged
-    // out of, since it persists its own connection state independently of ours
-    if(currentUser.method === "nip07" && currentUser.viaNostrLogin) payload.viaNostrLogin = true;
+    // the N-Connect flow's local ephemeral transport key + bunker pointer are persisted so a
+    // reload can reconnect the same bunker session (see reconnectBunkerSession()) without asking
+    // the user to scan/paste again — logOut() uses the viaBunker flag to close that connection
+    // properly rather than just dropping it
+    if(currentUser.method === "nip07" && currentUser.viaBunker){
+      payload.viaBunker = true;
+      payload.bunkerClientSecretHex = bytesToHex(currentUser.bunkerClientSecret);
+      payload.bunkerRelays = currentUser.bunkerPointer.relays;
+      payload.bunkerSecret = currentUser.bunkerPointer.secret;
+    }
     if(currentUser.method === "local"){
       if(currentUser.encrypted){
         payload.encrypted = true;
@@ -1539,7 +1583,15 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
         return { method:"local", secretKey:sk, pubkey:pk, npub: nip19.npubEncode(pk) };
       }
       if(data.method === "nip07" && data.pubkey){
-        return { method:"nip07", pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey), viaNostrLogin: !!data.viaNostrLogin };
+        const base = { method:"nip07", pubkey:data.pubkey, npub: nip19.npubEncode(data.pubkey) };
+        if(data.viaBunker && data.bunkerClientSecretHex){
+          return {
+            ...base, viaBunker:true,
+            bunkerClientSecret: hexToBytes(data.bunkerClientSecretHex),
+            bunkerPointer: { pubkey:data.pubkey, relays:data.bunkerRelays||[], secret:data.bunkerSecret||null }
+          };
+        }
+        return base;
       }
     }catch(e){ /* corrupt session, ignore */ }
     return null;
@@ -1570,9 +1622,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   }
 
   function logOut(){
-    // dispatched before clearing currentUser purely so the check below sees the flag; nostr-login
-    // listens for this event itself (see the script tag in <head>) and drops the bunker connection
-    if(currentUser?.viaNostrLogin) document.dispatchEvent(new Event("nlLogout"));
+    if(currentUser?.viaBunker) uninstallBunkerNip07();
     currentUser = null;
     inboxMessages = [];
     myApplications = [];
@@ -1620,6 +1670,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
       btn.className = "account-chip";
       btn.textContent = "Log in";
       btn.addEventListener("click", ()=>{
+        abortNConnectQR();
         document.getElementById("auth-tabs").style.display = "";
         document.querySelectorAll(".auth-tab").forEach(t=>t.classList.toggle("active", t.dataset.auth==="extension"));
         document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel==="extension"));
@@ -1630,6 +1681,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   }
 
   function openUnlockPrompt(){
+    abortNConnectQR();
     document.getElementById("auth-tabs").style.display = "none";
     document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel==="unlock"));
     document.getElementById("f-unlock-passphrase").value = "";
@@ -1643,7 +1695,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     status.style.display = "block";
     status.classList.remove("good");
     if(!window.nostr || typeof window.nostr.getPublicKey !== "function"){
-      status.textContent = "No Nostr extension detected. Install one (e.g. Alby, nos2x) and reload, or use Create account / I have a key instead.";
+      status.textContent = "No Nostr extension detected. Install one (e.g. Alby, nos2x) and reload, or use Create account / Private Key instead.";
       return;
     }
     try{
@@ -1654,55 +1706,155 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     }
   });
 
-  // -- remote signer (nostr-login, NIP-46 bunker) --
-  // nostr-login's own connect dialog depends on fetching the configured bunker's NIP-05-style
-  // discovery doc (nsec.app/.well-known/nostr.json) before it will render anything — if that
-  // fetch fails (confirmed in testing: nsec.app returned a live 503 at one point), the dialog
-  // never appears and nostr-login only logs the failure to console, with nothing shown to the
-  // user. This timeout is our own fallback so a dead upstream doesn't leave the button looking
-  // like it's doing something forever.
-  // the `nl-banner{ display:none !important; }` rule near the top of <style> hides nostr-login's
-  // own floating icon by default — these two just poke an inline override on/off around an actual
-  // connect attempt, since the icon and its on-demand dialog share the same host element
-  function showRemoteSignerIcon(){
-    document.querySelector("nl-banner")?.style.setProperty("display", "block", "important");
+  // -- N-Connect (NIP-46 remote signer / "bunker") --
+  // Built directly on nostr-tools' own nip46 module (BunkerSigner / parseBunkerInput /
+  // createNostrConnectURI) rather than a third-party widget — this app already loads nostr-tools
+  // for everything else, so no extra signing stack to reason about. Once connected, a small
+  // window.nostr adapter (installBunkerNip07 below) makes the bunker session look exactly like a
+  // NIP-07 extension, so signNostrEvent()/sendEncryptedDM()/decrypt all work completely unchanged
+  // — see "nip07" branches elsewhere in this file.
+  let bunkerSigner = null; // the live BunkerSigner for the current session, if logged in via N-Connect
+  const HAS_ORIGINAL_NOSTR_KEY = "__stakrabbitOriginalNostr";
+
+  function installBunkerNip07(signer, pubkey){
+    if(!(HAS_ORIGINAL_NOSTR_KEY in window)) window[HAS_ORIGINAL_NOSTR_KEY] = window.nostr;
+    bunkerSigner = signer;
+    window.nostr = {
+      getPublicKey: async () => pubkey,
+      signEvent: async (evt) => await signer.signEvent(evt),
+      nip04: {
+        encrypt: async (pk, plaintext) => await signer.nip04Encrypt(pk, plaintext),
+        decrypt: async (pk, ciphertext) => await signer.nip04Decrypt(pk, ciphertext),
+      },
+    };
   }
-  function hideRemoteSignerIcon(){
-    document.querySelector("nl-banner")?.style.removeProperty("display");
+  function uninstallBunkerNip07(){
+    if(bunkerSigner){ try{ bunkerSigner.close(); }catch(e){} bunkerSigner = null; }
+    if(HAS_ORIGINAL_NOSTR_KEY in window){
+      window.nostr = window[HAS_ORIGINAL_NOSTR_KEY];
+      delete window[HAS_ORIGINAL_NOSTR_KEY];
+    }
   }
 
-  let remoteLoginTimeout = null;
-  document.getElementById("auth-connect-remote").addEventListener("click", ()=>{
-    const status = document.getElementById("auth-remote-status");
+  async function finishNConnectLogin(signer, clientSecretKey){
+    if(currentUser) { try{ await signer.close(); }catch(e){} return; } // a stale attempt resolved after another login already succeeded
+    const pubkey = await signer.getPublicKey();
+    installBunkerNip07(signer, pubkey);
+    logIn({ method:"nip07", viaBunker:true, pubkey, npub: nip19.npubEncode(pubkey), bunkerClientSecret: clientSecretKey, bunkerPointer: signer.bp });
+  }
+
+  // reconnects a bunker session restored from localStorage on page load (see loadSession()) —
+  // pings the bunker to confirm the session is still live before trusting it
+  async function reconnectBunkerSession(user){
+    const signer = BunkerSigner.fromBunker(user.bunkerClientSecret, user.bunkerPointer);
+    await signer.ping();
+    installBunkerNip07(signer, user.pubkey);
+  }
+
+  // -- N-Connect: QR Code sub-tab (this app generates a nostrconnect:// URI, the signer scans it) --
+  let nconnectAbortController = null;
+  let nconnectAttemptId = 0; // bumped on every start/abort so a stale attempt's async callbacks are ignored
+
+  function abortNConnectQR(){
+    nconnectAttemptId++;
+    if(nconnectAbortController){ nconnectAbortController.abort(); nconnectAbortController = null; }
+  }
+
+  async function startNConnectQR(){
+    const myAttempt = ++nconnectAttemptId;
+    if(nconnectAbortController) nconnectAbortController.abort();
+    nconnectAbortController = new AbortController();
+
+    const wrap = document.getElementById("nconnect-qr-wrap");
+    wrap.innerHTML = `<div class="notice" id="nconnect-qr-status">Generating connection code…</div>`;
+
+    const clientSecretKey = generateSecretKey();
+    const clientPubkey = getPublicKey(clientSecretKey);
+    const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+    const uri = createNostrConnectURI({
+      clientPubkey, relays: RELAYS, secret,
+      name: "stakrabbit", url: window.location.origin,
+    });
+
+    let qrDataUrl;
+    try{
+      qrDataUrl = await QRCode.toDataURL(uri, { width:220, margin:1, color:{ dark:"#16211B", light:"#FBFAF4" } });
+    }catch(e){
+      if(myAttempt !== nconnectAttemptId) return;
+      wrap.innerHTML = `<div class="notice">Couldn't generate the connection code. Try the Bunker URL tab instead.</div>`;
+      return;
+    }
+    if(myAttempt !== nconnectAttemptId) return;
+
+    wrap.innerHTML = `
+      <img src="${qrDataUrl}" alt="Nostr Connect QR code" width="220" height="220">
+      <div class="notice" id="nconnect-qr-status">Waiting for your signer to approve…</div>
+      <div class="addr-row" style="width:100%;">
+        <span style="flex:1; word-break:break-all; font-size:11px;">${uri}</span>
+        <button type="button" id="nconnect-copy-uri">Copy</button>
+      </div>
+    `;
+    document.getElementById("nconnect-copy-uri").addEventListener("click", ()=>{
+      navigator.clipboard?.writeText(uri).catch(()=>{});
+    });
+
+    try{
+      const signer = await BunkerSigner.fromURI(clientSecretKey, uri, {
+        onauth: (url) => {
+          if(myAttempt !== nconnectAttemptId) return;
+          const status = document.getElementById("nconnect-qr-status");
+          if(status) status.innerHTML = `Your signer needs approval — <a href="${url}" target="_blank" rel="noopener noreferrer">open the approval page</a>.`;
+        },
+      }, nconnectAbortController.signal);
+      if(myAttempt !== nconnectAttemptId) return;
+      await finishNConnectLogin(signer, clientSecretKey);
+    }catch(e){
+      if(myAttempt !== nconnectAttemptId) return;
+      const status = document.getElementById("nconnect-qr-status");
+      if(status) status.textContent = "Connection didn't complete — try scanning again, or use the Bunker URL tab.";
+    }
+  }
+
+  // -- N-Connect: Bunker URL sub-tab (paste a bunker:// string copied from the signer app) --
+  document.getElementById("auth-connect-bunker").addEventListener("click", async ()=>{
+    const status = document.getElementById("auth-bunker-status");
     status.style.display = "block";
     status.classList.remove("good");
-    status.textContent = "Opening connection dialog…";
-    showRemoteSignerIcon();
-    document.dispatchEvent(new CustomEvent("nlLaunch", { detail: "login" }));
-    clearTimeout(remoteLoginTimeout);
-    remoteLoginTimeout = setTimeout(()=>{
-      if(currentUser) return;
-      status.textContent = "Couldn't open the connection dialog — the remote signer's discovery service may be unreachable right now. Try again in a moment, or use Extension / Create account / I have a key instead.";
-      hideRemoteSignerIcon();
-    }, 10000);
+    const raw = document.getElementById("f-bunker-url").value.trim();
+    if(!raw){ status.textContent = "Paste a bunker:// connection string first."; return; }
+
+    let bp;
+    try{ bp = await parseBunkerInput(raw); }catch(e){ bp = null; }
+    if(!bp || !bp.pubkey || !bp.relays || !bp.relays.length){
+      status.textContent = "That doesn't look like a valid bunker:// URL.";
+      return;
+    }
+
+    status.textContent = "Connecting…";
+    const clientSecretKey = generateSecretKey();
+    try{
+      const signer = BunkerSigner.fromBunker(clientSecretKey, bp, {
+        onauth: (url) => {
+          status.innerHTML = `Your signer needs approval — <a href="${url}" target="_blank" rel="noopener noreferrer">open the approval page</a>.`;
+        },
+      });
+      await signer.connect();
+      await finishNConnectLogin(signer, clientSecretKey);
+      document.getElementById("f-bunker-url").value = "";
+    }catch(e){
+      console.error(e);
+      status.textContent = "Couldn't connect — check the bunker URL and try again.";
+    }
   });
 
-  // nostr-login fires this once a bunker session is live (or auto-restores a previous one on
-  // page load) — window.nostr is already a working NIP-07 provider by this point, so logging in
-  // here is identical to the extension flow above, just with a different signer behind the scenes
-  document.addEventListener("nlAuth", async (e)=>{
-    if(currentUser || !(e.detail?.type === "login" || e.detail?.type === "signup")) return;
-    clearTimeout(remoteLoginTimeout);
-    hideRemoteSignerIcon();
-    try{
-      const pubkey = await window.nostr.getPublicKey();
-      logIn({ method:"nip07", viaNostrLogin:true, pubkey, npub: nip19.npubEncode(pubkey) });
-    }catch(err){
-      console.error(err);
-      const status = document.getElementById("auth-remote-status");
-      status.style.display = "block";
-      status.textContent = "Connected, but couldn't read the public key back.";
-    }
+  // -- N-Connect sub-tabs (QR Code / Bunker URL) --
+  document.querySelectorAll(".nconnect-subtab").forEach(tab=>{
+    tab.addEventListener("click", ()=>{
+      document.querySelectorAll(".nconnect-subtab").forEach(t=>t.classList.toggle("active", t===tab));
+      document.querySelectorAll(".nconnect-subpanel").forEach(p=>p.classList.toggle("active", p.dataset.nconnectPanel===tab.dataset.nconnect));
+      if(tab.dataset.nconnect === "qr") startNConnectQR();
+      else abortNConnectQR();
+    });
   });
 
   // -- create account --
@@ -1790,6 +1942,7 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     }
   });
   document.getElementById("auth-unlock-forget").addEventListener("click", ()=>{
+    abortNConnectQR();
     lockedAccount = null;
     localStorage.removeItem(AUTH_STORAGE_KEY);
     document.getElementById("auth-tabs").style.display = "";
@@ -1803,6 +1956,14 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
     tab.addEventListener("click", ()=>{
       document.querySelectorAll(".auth-tab").forEach(t=>t.classList.toggle("active", t===tab));
       document.querySelectorAll(".auth-panel").forEach(p=>p.classList.toggle("active", p.dataset.authPanel===tab.dataset.auth));
+      if(tab.dataset.auth === "nconnect"){
+        // only (re)start the QR listener if the QR sub-tab is the one actually visible —
+        // re-entering N-Connect while Bunker URL is selected shouldn't open a hidden subscription
+        const activeSub = document.querySelector(".nconnect-subtab.active");
+        if(!activeSub || activeSub.dataset.nconnect === "qr") startNConnectQR();
+      } else {
+        abortNConnectQR();
+      }
     });
   });
 
@@ -3149,6 +3310,9 @@ import * as nip04 from "https://esm.sh/nostr-tools@2/nip04";
   } else {
     currentUser = restoredSession;
     if(currentUser) myApplications = loadMyApplications();
+    if(currentUser?.viaBunker){
+      reconnectBunkerSession(currentUser).catch(()=>{ logOut(); });
+    }
   }
   updateAuthUI();
   connectRelays();
