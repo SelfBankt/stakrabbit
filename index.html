@@ -194,6 +194,7 @@
     overflow:hidden;
   }
   .leaflet-popup-content{ font-family:'Instrument Sans',sans-serif; min-width:190px; }
+  .popup-info{ cursor:pointer; }
   .popup-cat{
     font-family:'Spline Sans Mono', monospace; font-size:10px; text-transform:uppercase;
     color:var(--moss); margin-bottom:4px; display:block;
@@ -259,6 +260,7 @@
     padding:20px 18px 18px;
     box-shadow:var(--card-shadow);
     transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    cursor:pointer;
   }
   .card:hover{
     transform:translateY(-3px);
@@ -1237,6 +1239,10 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         } else {
           actionBtn.addEventListener("click", ()=> openApplyDrawer(l));
         }
+        card.addEventListener("click", (e)=>{
+          if(e.target.closest(".pay-btn")) return; // the action button already has its own handler above
+          openListingDetail(l);
+        });
         return card;
       });
       grid.replaceChildren(...cards);
@@ -2747,8 +2753,29 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   // ---------- job detail (view/edit posted, thread for applied) ----------
   function openJobDetail(mode, item){
     if(mode === "posted") renderJobDetailPostedView(item);
-    else renderJobDetailAppliedView(item);
+    else if(mode === "applied") renderJobDetailAppliedView(item);
+    else renderJobDetailBrowseView(item);
     openDrawer(jobDetailDrawer);
+  }
+
+  // clicking a listing (board card or map popup) routes to whichever jobdetail-drawer view
+  // actually applies to it — the poster's own management view, the thread if you've already
+  // applied, or a read-only preview with an Apply call-to-action otherwise
+  function openListingDetail(listing){
+    if(!currentUser){
+      openDrawer(authDrawer);
+      return;
+    }
+    if(listing.pubkey && listing.pubkey === currentUser.pubkey){
+      openJobDetail("posted", listing);
+      return;
+    }
+    const existingApp = myApplications.find(a=>a.listingId===listing.id);
+    if(existingApp){
+      openJobDetail("applied", existingApp);
+      return;
+    }
+    openJobDetail("browse", listing);
   }
 
   function renderJobDetailPostedView(listing){
@@ -2844,6 +2871,35 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         closeBtn.disabled = true;
         await handleCloseListing(listing);
         renderJobDetailPostedView(listing);
+      });
+    }
+  }
+
+  // read-only preview shown when a logged-in user opens a listing that isn't theirs and they
+  // haven't applied to yet — see openListingDetail() for the routing between this, the posted
+  // view, and the applied view
+  function renderJobDetailBrowseView(listing){
+    document.getElementById("jobdetail-title").textContent = listing.title;
+    const body = document.getElementById("jobdetail-body");
+
+    const infoHtml = `
+      ${renderMediaGallery(listing.media)}
+      <div class="plain-note" style="margin-bottom:16px;">
+        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(listing.pubkey)}${renderTierBadge(listing.pubkey)}<br>
+        ${(listing.methods||[]).map(m=>METHOD_LABEL[m]||m).join(", ")}<br><br>
+        ${escapeHtml(listing.desc)}
+      </div>
+    `;
+
+    if(!listing.pubkey){
+      body.innerHTML = infoHtml + `<div class="plain-note"><strong>Demo listing.</strong> This is illustrative sample data, not a real posting — there's no poster to apply to.</div>`;
+    } else if(listing.status && listing.status !== "active"){
+      body.innerHTML = infoHtml + `<div class="plain-note"><strong>No longer taking applications.</strong> ${listing.status === "in-progress" ? "The poster has already accepted someone for this job." : "This listing has been closed."}</div>`;
+    } else {
+      body.innerHTML = infoHtml + `<button class="btn btn-primary" id="jd-apply-btn" style="width:100%; justify-content:center;">Apply for this job</button>`;
+      document.getElementById("jd-apply-btn").addEventListener("click", ()=>{
+        closeDrawers();
+        openApplyDrawer(listing);
       });
     }
   }
@@ -3270,13 +3326,17 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       const marker = L.marker([l.lat, l.lon]).addTo(markerLayer);
       const isOwner = currentUser && l.pubkey === currentUser.pubkey;
       const popupHtml = `
-        <span class="popup-cat">${catLabel(l.category)}</span>
-        <p class="popup-title">${escapeHtml(l.title)}</p>
-        <div class="popup-price">${formatPriceLine(l)}</div>
+        <div class="popup-info" id="popup-info-${l.id}">
+          <span class="popup-cat">${catLabel(l.category)}</span>
+          <p class="popup-title">${escapeHtml(l.title)}</p>
+          <div class="popup-price">${formatPriceLine(l)}</div>
+        </div>
         <button class="popup-btn" id="popup-pay-${l.id}">${isOwner ? "Close listing" : "Apply"}</button>
       `;
       marker.bindPopup(popupHtml);
       marker.on("popupopen", ()=>{
+        const infoEl = document.getElementById(`popup-info-${l.id}`);
+        if(infoEl) infoEl.addEventListener("click", ()=> openListingDetail(l));
         const payBtn = document.getElementById(`popup-pay-${l.id}`);
         if(!payBtn) return;
         if(isOwner){
