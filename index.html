@@ -2144,7 +2144,13 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   async function signAndPublish(template){
     const signed = await signNostrEvent(template);
 
-    const openSockets = sockets.filter(ws => ws.readyState === WebSocket.OPEN);
+    let openSockets = sockets.filter(ws => ws.readyState === WebSocket.OPEN);
+    if(openSockets.length === 0){
+      // relays auto-reconnect in the background (see connectRelay) after a drop, so a "no relays
+      // open" moment is often just this action landing mid-reconnect — give it a few seconds
+      // rather than failing outright and forcing the user to reload the page
+      openSockets = await waitForAnyOpenSocket(4000);
+    }
     if(openSockets.length === 0){
       throw new Error("not connected to any relays");
     }
@@ -2155,6 +2161,20 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       throw new Error("no relay accepted the event");
     }
     return signed;
+  }
+
+  function waitForAnyOpenSocket(timeoutMs){
+    return new Promise(resolve=>{
+      const deadline = Date.now() + timeoutMs;
+      (function poll(){
+        const open = sockets.filter(ws => ws.readyState === WebSocket.OPEN);
+        if(open.length > 0 || Date.now() >= deadline){
+          resolve(open);
+        } else {
+          setTimeout(poll, 300);
+        }
+      })();
+    });
   }
 
   // NIP-20: relays reply ["OK", eventId, true|false, message] after an EVENT publish.
@@ -2345,74 +2365,96 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     }
   }
 
-  function connectRelays(){
-    RELAYS.forEach(url=>{
-      let ws;
-      try{ ws = new WebSocket(url); } catch(e){ return; }
-      sockets.push(ws);
+  // Relay connections drop on their own over a long session (laptop sleep, wifi blip, a relay
+  // restarting, mobile browsers throttling a backgrounded tab's sockets) — without reconnecting,
+  // every relay-dependent action (post, apply, rate, vouch...) would keep failing with "not
+  // connected to any relays" until the user manually reloads the page. relayReconnectDelay tracks
+  // a per-URL backoff (reset to the base delay on a successful open, doubled up to a cap on each
+  // failure) so a relay that's down for a while isn't hammered with reconnect attempts.
+  const relayReconnectDelay = {};
+  const RELAY_RECONNECT_BASE_MS = 2000;
+  const RELAY_RECONNECT_MAX_MS = 20000;
 
-      ws.addEventListener("open", ()=>{
-        connectedCount++;
-        updateRelayStatus();
-        const sub = ["REQ", "satrabbit-feed", { kinds:[30402], "#t":[FEED_TAG], limit:50 }];
-        ws.send(JSON.stringify(sub));
-        sendInboxSubscription(ws);
-        const labelsSub = ["REQ", "satrabbit-labels", { kinds:[1985], "#L":[RATING_NAMESPACE, VOUCH_NAMESPACE], limit:500 }];
-        ws.send(JSON.stringify(labelsSub));
-      });
+  function scheduleRelayReconnect(url){
+    const delay = relayReconnectDelay[url] || RELAY_RECONNECT_BASE_MS;
+    relayReconnectDelay[url] = Math.min(delay * 2, RELAY_RECONNECT_MAX_MS);
+    setTimeout(()=> connectRelay(url), delay);
+  }
 
-      ws.addEventListener("message", (msg)=>{
-        try{
-          const data = JSON.parse(msg.data);
-          if(data[0] === "EVENT" && data[2]){
-            const evt = data[2];
-            if(evt.kind === 30402){
-              const listing = eventToListing(evt);
-              if(listing){
-                // kind:30402 is addressable — relays may deliver an older and newer version of the
-                // same (pubkey, d-tag) listing in either order, so track the latest created_at we've
-                // seen per id independent of whether that listing is currently in `listings` (an
-                // "inactive" listing stays in the array, just hidden from the public board — see
-                // computeVisibleItems — so a late-arriving stale "active" event can't resurrect it)
-                const seenAt = listingLastSeenAt[listing.id];
-                const isStale = seenAt != null && listing.created_at != null && listing.created_at < seenAt;
-                if(!isStale){
-                  if(listing.created_at != null) listingLastSeenAt[listing.id] = listing.created_at;
-                  const idx = listings.findIndex(l=>l.id===listing.id);
-                  if(idx !== -1){
-                    listings[idx] = listing;
-                  } else {
-                    listings.push(listing);
-                  }
-                  renderFilters();
-                  renderGrid();
-                  // this fires on every listing event from anyone on the tag, so skip rebuilding
-                  // My Jobs' full innerHTML while it's not even visible — its own open-drawer
-                  // handler already renders fresh content the moment it's opened
-                  if(myJobsDrawer.classList.contains("show")) renderMyJobs();
-                }
-              }
-            } else if(evt.kind === 4){
-              handleIncomingDM(evt);
-            } else if(evt.kind === 1985){
-              // one shared subscription (satrabbit-labels) covers both label namespaces, so
-              // dispatch on the "L" tag rather than doubling up REQs for the same event kind
-              const namespace = tagVal(evt.tags || [], "L");
-              if(namespace === RATING_NAMESPACE) handleIncomingRating(evt);
-              else if(namespace === VOUCH_NAMESPACE) handleIncomingVouch(evt);
-            }
-          } else if(data[0] === "OK" && data[1]){
-            handlePublishAck(data[1], !!data[2]);
-          }
-        }catch(e){ /* ignore malformed */ }
-      });
+  function connectRelay(url){
+    let ws;
+    try{ ws = new WebSocket(url); } catch(e){ scheduleRelayReconnect(url); return; }
+    sockets.push(ws);
 
-      ws.addEventListener("close", ()=>{
-        connectedCount = Math.max(0, connectedCount-1);
-        updateRelayStatus();
-      });
-      ws.addEventListener("error", ()=>{ /* handled by close */ });
+    ws.addEventListener("open", ()=>{
+      connectedCount++;
+      relayReconnectDelay[url] = RELAY_RECONNECT_BASE_MS; // back off resets once a connection actually succeeds
+      updateRelayStatus();
+      const sub = ["REQ", "satrabbit-feed", { kinds:[30402], "#t":[FEED_TAG], limit:50 }];
+      ws.send(JSON.stringify(sub));
+      sendInboxSubscription(ws);
+      const labelsSub = ["REQ", "satrabbit-labels", { kinds:[1985], "#L":[RATING_NAMESPACE, VOUCH_NAMESPACE], limit:500 }];
+      ws.send(JSON.stringify(labelsSub));
     });
+
+    ws.addEventListener("message", (msg)=>{
+      try{
+        const data = JSON.parse(msg.data);
+        if(data[0] === "EVENT" && data[2]){
+          const evt = data[2];
+          if(evt.kind === 30402){
+            const listing = eventToListing(evt);
+            if(listing){
+              // kind:30402 is addressable — relays may deliver an older and newer version of the
+              // same (pubkey, d-tag) listing in either order, so track the latest created_at we've
+              // seen per id independent of whether that listing is currently in `listings` (an
+              // "inactive" listing stays in the array, just hidden from the public board — see
+              // computeVisibleItems — so a late-arriving stale "active" event can't resurrect it)
+              const seenAt = listingLastSeenAt[listing.id];
+              const isStale = seenAt != null && listing.created_at != null && listing.created_at < seenAt;
+              if(!isStale){
+                if(listing.created_at != null) listingLastSeenAt[listing.id] = listing.created_at;
+                const idx = listings.findIndex(l=>l.id===listing.id);
+                if(idx !== -1){
+                  listings[idx] = listing;
+                } else {
+                  listings.push(listing);
+                }
+                renderFilters();
+                renderGrid();
+                // this fires on every listing event from anyone on the tag, so skip rebuilding
+                // My Jobs' full innerHTML while it's not even visible — its own open-drawer
+                // handler already renders fresh content the moment it's opened
+                if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+              }
+            }
+          } else if(evt.kind === 4){
+            handleIncomingDM(evt);
+          } else if(evt.kind === 1985){
+            // one shared subscription (satrabbit-labels) covers both label namespaces, so
+            // dispatch on the "L" tag rather than doubling up REQs for the same event kind
+            const namespace = tagVal(evt.tags || [], "L");
+            if(namespace === RATING_NAMESPACE) handleIncomingRating(evt);
+            else if(namespace === VOUCH_NAMESPACE) handleIncomingVouch(evt);
+          }
+        } else if(data[0] === "OK" && data[1]){
+          handlePublishAck(data[1], !!data[2]);
+        }
+      }catch(e){ /* ignore malformed */ }
+    });
+
+    ws.addEventListener("close", ()=>{
+      const idx = sockets.indexOf(ws);
+      if(idx !== -1) sockets.splice(idx, 1);
+      connectedCount = Math.max(0, connectedCount-1);
+      updateRelayStatus();
+      scheduleRelayReconnect(url);
+    });
+    ws.addEventListener("error", ()=>{ /* handled by close, which also fires for a failed connection attempt */ });
+  }
+
+  function connectRelays(){
+    RELAYS.forEach(url => connectRelay(url));
 
     // fallback: if nothing connects within 6s, make sure status reflects that
     setTimeout(updateRelayStatus, 6000);

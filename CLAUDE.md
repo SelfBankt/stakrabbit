@@ -67,6 +67,8 @@ Photos/audio/video attach via [NIP-92](https://github.com/nostr-protocol/nips/bl
 
 `signAndPublish()` doesn't just fire-and-forget an `EVENT` message — it waits for at least one relay's `["OK", eventId, true, ...]` response (`waitForPublishConfirmation()` / `handlePublishAck()`) before resolving, and throws if every relay rejects or none respond within 5s. Without this, a relay silently dropping an event would look identical to success.
 
+**Relay reconnection:** `connectRelay(url)` (called per-`RELAYS` entry by `connectRelays()`) auto-reconnects on any `close` — a relay dropping mid-session (laptop sleep, wifi blip, a relay restarting, a backgrounded mobile tab getting its sockets throttled) used to be permanent for the rest of that page load, since nothing ever retried; every later relay-dependent action would fail with "not connected to any relays" until a manual reload. `scheduleRelayReconnect()` backs off per-URL (`relayReconnectDelay`, 2s → doubling → capped at 20s, reset to the base on a successful `open`) so a relay that's down for a while isn't hammered. `signAndPublish()` also no longer fails instantly if zero sockets are open at that exact moment — `waitForAnyOpenSocket(4000)` gives a just-scheduled reconnect a few seconds to land first, since that race (action fired right as the last socket died, before its reconnect timer fires) was the most common way to hit the "not connected" error in practice.
+
 ### Rendering
 
 No framework — every `render*()` function rebuilds the relevant DOM subtree via `innerHTML` and re-attaches listeners. A few things worth knowing before touching this:
