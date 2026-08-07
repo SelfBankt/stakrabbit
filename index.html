@@ -4,6 +4,52 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>stakrabbit — quick jobs, local gig economy</title>
+<meta name="description" content="Free local classifieds for casual jobs — lawnmowing, dog walking, cleaning, moving help, bar shifts and more. No signup to browse, free to post, pay with cash, bank transfer, or Bitcoin Lightning.">
+<link rel="canonical" href="https://stakrabbit.com/">
+
+<!-- Open Graph / Twitter Card — icon-512.png is a square logo, not a dedicated 1200x630 social
+     banner, hence og:image:width/height set to match it and Twitter using "summary" (small,
+     square-friendly) rather than "summary_large_image" (expects a landscape banner and would crop
+     a square image awkwardly). Swap in a real banner image and switch the Twitter card type if one
+     ever gets made. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="stakrabbit">
+<meta property="og:title" content="stakrabbit — Free Gig Market for local casual jobs">
+<meta property="og:description" content="Free local classifieds for casual jobs — lawnmowing, dog walking, cleaning, moving help, bar shifts and more. No signup to browse, free to post, pay with cash, bank transfer, or Bitcoin Lightning.">
+<meta property="og:url" content="https://stakrabbit.com/">
+<meta property="og:image" content="https://stakrabbit.com/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="stakrabbit — Free Gig Market for local casual jobs">
+<meta name="twitter:description" content="Free local classifieds for casual jobs — lawnmowing, dog walking, cleaning, moving help, bar shifts and more. No signup to browse, free to post.">
+<meta name="twitter:image" content="https://stakrabbit.com/icons/icon-512.png">
+
+<!-- Describes the site itself, not individual listings — there's no per-listing URL to attach
+     JobPosting schema to (see CLAUDE.md "SEO"), so this deliberately stops at Organization/WebSite
+     rather than fabricating structured data for content that isn't actually independently indexable. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://stakrabbit.com/#website",
+      "url": "https://stakrabbit.com/",
+      "name": "stakrabbit",
+      "description": "Free, decentralized local classifieds board for casual jobs — lawnmowing, dog walking, cleaning, moving help, bar shifts, and more. No signup needed to browse."
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://stakrabbit.com/#organization",
+      "name": "stakrabbit",
+      "url": "https://stakrabbit.com/",
+      "logo": "https://stakrabbit.com/icons/icon-512.png"
+    }
+  ]
+}
+</script>
+
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#04534D">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
@@ -182,6 +228,12 @@
     border:1px solid rgba(17,17,17,0.12);
     box-shadow:var(--card-shadow);
     overflow:hidden;
+    /* Leaflet's own panes go up to z-index:700 (popupPane) — without this, #map-view (which
+       Leaflet turns into .leaflet-container, position:relative but no z-index of its own) doesn't
+       establish a stacking context, so those panes compare directly against page-level elements
+       like .drawer (z-index:50) and paint on top of it instead of being contained beneath it. */
+    position:relative;
+    z-index:1;
   }
   .leaflet-popup-content{ font-family:'Instrument Sans',sans-serif; min-width:190px; }
   .popup-info{ cursor:pointer; }
@@ -725,10 +777,19 @@
       <div class="field">
         <label for="f-category">Category</label>
         <select id="f-category"></select>
+        <input id="f-category-new" placeholder="New category name" style="display:none; margin-top:8px;">
       </div>
       <div class="field">
         <label for="f-location">Location (town / village)</label>
         <input id="f-location" required placeholder="e.g. Pucklechurch, South Glos">
+      </div>
+      <div class="field">
+        <label>When do you want this done?</label>
+        <div class="method-row">
+          <label class="hero-tag" style="cursor:pointer;"><input type="radio" name="f-due-mode" id="f-due-mode-on" value="on" style="margin-right:5px;" checked>On date</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="radio" name="f-due-mode" id="f-due-mode-before" value="before" style="margin-right:5px;">Before date</label>
+        </div>
+        <input id="f-due-date" type="date" required style="margin-top:8px;">
       </div>
       <div class="field">
         <label>Accepted payment methods</label>
@@ -954,7 +1015,15 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   const VOUCH_THRESHOLD = 2; // distinct vouchers needed before the "✓ Vouched" badge shows
   const APPLICATION_EXPIRY_SECONDS = 60*60*24*7; // 7 days — cosmetic staleness flag, doesn't hide or delete anything
 
+  // Mutated at runtime by registerCategory() when a poster picks "+ Add new category…" — see
+  // "Custom categories" for why this is deliberately just an in-memory list, not a synced registry.
+  // "misc" is deliberately first: categoryOptionsHtml() marks no option "selected" when the
+  // caller doesn't pass one (the Post form's initial populateCategorySelect() call), so the first
+  // entry here is what a browser default-selects — making category effectively optional to post a
+  // job, since a poster who never touches the dropdown still gets a sensible category rather than
+  // whatever alphabetically/arbitrarily happened to be first before this.
   const CATEGORIES = [
+    { slug:"misc",        label:"Misc." },
     { slug:"gardening",  label:"Gardening & lawns" },
     { slug:"dogwalking", label:"Dog walking" },
     { slug:"cleaning",   label:"Cleaning" },
@@ -963,7 +1032,64 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     { slug:"carwash",    label:"Car washing" },
     { slug:"errands",    label:"Errands & odd jobs" },
   ];
-  const catLabel = slug => (CATEGORIES.find(c=>c.slug===slug)||{}).label || slug;
+  const NEW_CATEGORY_VALUE = "__new_category__"; // <select> sentinel for "+ Add new category…"
+
+  function catLabel(slug){
+    const known = CATEGORIES.find(c=>c.slug===slug);
+    if(known) return known.label;
+    // Unrecognized slug — a custom category typed in another session/device (CATEGORIES is
+    // in-memory only, see above) or published by a different Nostr client entirely. Prettify the
+    // raw slug rather than showing dashes verbatim: still readable, not broken.
+    return slug.replace(/-/g, " ").replace(/\b\w/g, ch => ch.toUpperCase());
+  }
+
+  function slugifyCategory(label){
+    return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  // Registers a new category label for this session so catLabel()/the category <select>s show it
+  // properly instead of falling back to the prettified-slug guess above. Idempotent on slug, so
+  // re-selecting an existing custom category (e.g. re-opening Edit) doesn't create a duplicate.
+  function registerCategory(label){
+    const slug = slugifyCategory(label);
+    if(!slug) return null;
+    if(!CATEGORIES.find(c=>c.slug===slug)) CATEGORIES.push({ slug, label: label.trim() });
+    return slug;
+  }
+
+  function categoryOptionsHtml(selectedSlug){
+    return CATEGORIES.map(c=>`<option value="${c.slug}" ${c.slug===selectedSlug?"selected":""}>${escapeHtml(c.label)}</option>`).join("")
+      + `<option value="${NEW_CATEGORY_VALUE}">+ Add new category…</option>`;
+  }
+
+  // Shared by the Post form (#f-category) and the listing Edit form (#jd-category) — both offer a
+  // "+ Add new category…" option that reveals a free-text input next to the <select>, using the
+  // same style.display show/hide convention as the rest of the app (e.g. the auth drawer's step
+  // toggles) rather than a CSS utility class.
+  function wireCategorySelect(selectId, inputId){
+    const sel = document.getElementById(selectId);
+    const input = document.getElementById(inputId);
+    sel.addEventListener("change", ()=>{
+      const isNew = sel.value === NEW_CATEGORY_VALUE;
+      input.style.display = isNew ? "" : "none";
+      if(isNew) input.focus();
+    });
+  }
+
+  // Resolves whichever category the user actually chose at submit time — an existing slug, or (if
+  // "+ Add new category…" is selected) a freshly registered one from the free-text input. Returns
+  // null and alerts if that option is selected but left blank, so callers can bail out of submit
+  // the same way they already do for other missing-required-field cases.
+  function resolveCategorySelection(selectId, inputId){
+    const sel = document.getElementById(selectId);
+    if(sel.value !== NEW_CATEGORY_VALUE) return sel.value;
+    const label = document.getElementById(inputId).value.trim();
+    if(!label){
+      alert("Enter a name for the new category.");
+      return null;
+    }
+    return registerCategory(label);
+  }
 
   const DEMO_LISTINGS = [
     { id:"demo-1", title:"Weekly lawnmowing, medium garden", category:"gardening", location:"Pucklechurch, South Glos", price:{gbp:12}, methods:["lightning","cash"], desc:"Regular Thursday mow, own mower needed. Ongoing weekly work through summer.", lnaddr:"finn@getalby.com", demo:true, lat:51.4881, lon:-2.4436 },
@@ -1160,10 +1286,35 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     return !l.demo || !hasRealListings();
   }
 
+  // "When do you want this done?" (dueDate/dueMode, see the Post/Edit forms) is a required field
+  // on every listing posted through this app, but older/demo listings predate it and simply won't
+  // have one — never filtered. Both dueMode values ("on" a specific day, or "before" a deadline)
+  // use the same cutoff: the listing stays valid through the end of that day, in the viewer's local
+  // time, expiring at midnight after it — a job needed "on Saturday" shouldn't vanish from the board
+  // before Saturday's even over.
+  function notExpired(l){
+    if(!l.dueDate) return true;
+    return Date.now() <= new Date(l.dueDate + "T23:59:59").getTime();
+  }
+
+  function formatDueLine(l){
+    if(!l.dueDate) return "";
+    const d = new Date(l.dueDate + "T00:00:00");
+    const formatted = d.toLocaleDateString(undefined, { day:"numeric", month:"short" });
+    return `${l.dueMode === "before" ? "Before" : "On"} ${formatted}`;
+  }
+
+  // Local (not UTC — toISOString() would risk an off-by-one near midnight) YYYY-MM-DD for today,
+  // used as the due-date <input>'s min so a job can't be posted already expired at submission time.
+  function todayISODate(){
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
   // ---------- render filters ----------
   function renderFilters(){
     const el = document.getElementById("filters");
-    const searchable = listings.filter(isOpenListing).filter(notHiddenDemo).filter(matchesSearch);
+    const searchable = listings.filter(isOpenListing).filter(notHiddenDemo).filter(notExpired).filter(matchesSearch);
     const counts = { all: searchable.length };
     CATEGORIES.forEach(c => counts[c.slug] = searchable.filter(l=>l.category===c.slug).length);
 
@@ -1180,7 +1331,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
   // ---------- render grid ----------
   function computeVisibleItems(){
-    let items = listings.filter(isOpenListing).filter(notHiddenDemo);
+    let items = listings.filter(isOpenListing).filter(notHiddenDemo).filter(notExpired);
     items = activeFilter==="all" ? items : items.filter(l=>l.category===activeFilter);
     items = items.filter(matchesSearch);
 
@@ -1250,6 +1401,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
           </div>
           <h3>${escapeHtml(l.title)}</h3>
           <div class="loc">📍 ${escapeHtml(l.location)}</div>
+          ${l.dueDate ? `<div class="loc">📅 ${formatDueLine(l)}</div>` : ""}
           <div class="method-row">
             ${(l.methods||[]).map(m=>`<span class="method-tag">${METHOD_LABEL[m]||m}</span>`).join("")}
           </div>
@@ -1368,8 +1520,8 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
   // ---------- category select ----------
   function populateCategorySelect(){
-    const sel = document.getElementById("f-category");
-    sel.innerHTML = CATEGORIES.map(c=>`<option value="${c.slug}">${c.label}</option>`).join("");
+    document.getElementById("f-category").innerHTML = categoryOptionsHtml();
+    wireCategorySelect("f-category", "f-category-new");
   }
 
   // ---------- drawers ----------
@@ -2101,9 +2253,17 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       return;
     }
     const title = document.getElementById("f-title").value.trim();
-    const category = document.getElementById("f-category").value;
+    const category = resolveCategorySelection("f-category", "f-category-new");
+    if(!category) return;
     const location = document.getElementById("f-location").value.trim();
     const desc = document.getElementById("f-desc").value.trim();
+
+    const dueMode = document.querySelector('input[name="f-due-mode"]:checked').value;
+    const dueDate = document.getElementById("f-due-date").value;
+    if(!dueDate){
+      alert("Choose when you want this done.");
+      return;
+    }
 
     const methods = [];
     if(mLightning.checked) methods.push("lightning");
@@ -2126,7 +2286,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     const dtag = "local-" + Date.now();
     const newListing = {
       id: currentUser.pubkey + ":" + dtag, dtag,
-      title, category, location, price, methods, desc,
+      title, category, location, price, methods, desc, dueDate, dueMode,
       demo:false, lat:null, lon:null, pubkey: currentUser.pubkey,
       status: "active", acceptedPubkey: null, created_at: Math.floor(Date.now()/1000)
     };
@@ -2166,6 +2326,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     renderGrid();
     closeDrawers();
     e.target.reset();
+    document.getElementById("f-category-new").style.display = "none";
     pendingMediaFiles = [];
     document.getElementById("f-media-preview").innerHTML = "";
   });
@@ -2191,6 +2352,11 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       ["status", status],
       ...(listing.lat!=null ? [["lat", String(listing.lat)]] : []),
       ...(listing.lon!=null ? [["lon", String(listing.lon)]] : []),
+      // "When do you want this done?" — required on every listing posted through this app (see the
+      // Post/Edit forms); older/demo listings just won't have one, hence the guard. dueMode is
+      // "on" (a specific day) or "before" (a deadline) — see notExpired()/formatDueLine() for how
+      // it's used to filter and display.
+      ...(listing.dueDate ? [["due", listing.dueDate, listing.dueMode || "on"]] : []),
       // records which applicant got the job — see handleAcceptApplicant — so the accepted tasker
       // (and reputation gating in the job-detail views) survives a page reload or a second device
       ...(listing.acceptedPubkey ? [["accepted", listing.acceptedPubkey]] : [])
@@ -2935,7 +3101,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       ${renderMediaGallery(listing.media)}
       <div class="plain-note" style="margin-bottom:16px;">
         <strong>${escapeHtml(listing.title)}</strong> · ${statusLabel}<br>
-        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}<br>
+        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}${listing.dueDate ? " · " + formatDueLine(listing) : ""}<br>
         ${(listing.methods||[]).map(m=>METHOD_LABEL[m]||m).join(", ")}<br><br>
         ${escapeHtml(listing.desc)}
       </div>
@@ -3029,7 +3195,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     const infoHtml = `
       ${renderMediaGallery(listing.media)}
       <div class="plain-note" style="margin-bottom:16px;">
-        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(listing.pubkey)}${renderTierBadge(listing.pubkey)}<br>
+        ${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}${listing.dueDate ? " · " + formatDueLine(listing) : ""} ${renderReputationBadge(listing.pubkey)}${renderTierBadge(listing.pubkey)}<br>
         ${(listing.methods||[]).map(m=>METHOD_LABEL[m]||m).join(", ")}<br><br>
         ${escapeHtml(listing.desc)}
       </div>
@@ -3074,6 +3240,12 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     let editingMedia = [...(listing.media||[])];
     let newMediaFiles = [];
 
+    // A listing's category may be a custom one this session's in-memory CATEGORIES doesn't know
+    // about yet (created in another session/device, or by another Nostr client entirely) — register
+    // it first so the <select> below actually has a matching, selected option instead of silently
+    // falling back to whatever the first option happens to be.
+    if(!CATEGORIES.find(c=>c.slug===listing.category)) registerCategory(catLabel(listing.category));
+
     body.innerHTML = `
       <div class="field">
         <label for="jd-title">Job title</label>
@@ -3081,11 +3253,20 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       </div>
       <div class="field">
         <label for="jd-category">Category</label>
-        <select id="jd-category">${CATEGORIES.map(c=>`<option value="${c.slug}" ${c.slug===listing.category?"selected":""}>${c.label}</option>`).join("")}</select>
+        <select id="jd-category">${categoryOptionsHtml(listing.category)}</select>
+        <input id="jd-category-new" placeholder="New category name" style="display:none; margin-top:8px;">
       </div>
       <div class="field">
         <label for="jd-location">Location (town / village)</label>
         <input id="jd-location" value="${escapeHtml(listing.location)}">
+      </div>
+      <div class="field">
+        <label>When do you want this done?</label>
+        <div class="method-row">
+          <label class="hero-tag" style="cursor:pointer;"><input type="radio" name="jd-due-mode" id="jd-due-mode-on" value="on" style="margin-right:5px;" ${listing.dueMode!=="before"?"checked":""}>On date</label>
+          <label class="hero-tag" style="cursor:pointer;"><input type="radio" name="jd-due-mode" id="jd-due-mode-before" value="before" style="margin-right:5px;" ${listing.dueMode==="before"?"checked":""}>Before date</label>
+        </div>
+        <input id="jd-due-date" type="date" required min="${todayISODate()}" value="${escapeHtml(listing.dueDate || "")}" style="margin-top:8px;">
       </div>
       <div class="field">
         <label>Accepted payment methods</label>
@@ -3138,6 +3319,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       refreshNewMedia();
     });
 
+    wireCategorySelect("jd-category", "jd-category-new");
     document.getElementById("jd-cancel-btn").addEventListener("click", ()=> renderJobDetailPostedView(listing));
     document.getElementById("jd-save-btn").addEventListener("click", async ()=>{
       const statusEl = document.getElementById("jd-edit-status");
@@ -3146,16 +3328,18 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       statusEl.classList.remove("good");
 
       const title = document.getElementById("jd-title").value.trim();
-      const category = document.getElementById("jd-category").value;
+      const category = resolveCategorySelection("jd-category", "jd-category-new");
       const location = document.getElementById("jd-location").value.trim();
       const desc = document.getElementById("jd-desc").value.trim();
+      const dueMode = document.querySelector('input[name="jd-due-mode"]:checked').value;
+      const dueDate = document.getElementById("jd-due-date").value;
       const methods = [];
       if(document.getElementById("jd-m-lightning").checked) methods.push("lightning");
       if(document.getElementById("jd-m-cash").checked) methods.push("cash");
       if(document.getElementById("jd-m-bank").checked) methods.push("bank");
       const gbpVal = parseInt(document.getElementById("jd-price").value, 10);
 
-      if(!title || !location || !desc || methods.length === 0 || !gbpVal){
+      if(!title || !category || !location || !desc || !dueDate || methods.length === 0 || !gbpVal){
         statusEl.textContent = "Fill in all fields and pick at least one payment method.";
         return;
       }
@@ -3182,6 +3366,8 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       listing.category = category;
       listing.location = location;
       listing.desc = desc;
+      listing.dueDate = dueDate;
+      listing.dueMode = dueMode;
       listing.methods = methods;
       listing.price = { gbp: gbpVal };
       listing.media = editingMedia;
@@ -3221,7 +3407,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       ${listing ? renderMediaGallery(listing.media) : ""}
       ${acceptedMe ? `<div class="plain-note" style="margin-bottom:16px;"><strong>🎉 You got this job!</strong> Message the poster here to sort out the details.</div>` : ""}
       ${acceptedSomeoneElse ? `<div class="plain-note" style="margin-bottom:16px;">This job went to another applicant.</div>` : ""}
-      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)} ${renderReputationBadge(app.posterPubkey)}${renderTierBadge(app.posterPubkey)}</div>` : ""}
+      ${listing ? `<div class="plain-note" style="margin-bottom:16px;">${catLabel(listing.category)} · ${escapeHtml(listing.location)} · ${formatPriceLine(listing)}${listing.dueDate ? " · " + formatDueLine(listing) : ""} ${renderReputationBadge(app.posterPubkey)}${renderTierBadge(app.posterPubkey)}</div>` : ""}
       <div id="jd-thread"></div>
       <div id="jd-vouch-poster"></div>
       ${canRatePoster ? `<div id="jd-rate-poster"></div>` : ""}
@@ -3301,12 +3487,19 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       });
       const methods = tags.filter(t=>t[0]==="method").map(t=>t[1]);
       const catTags = tags.filter(t=>t[0]==="t").map(t=>t[1]).filter(t=>t!==FEED_TAG);
-      const category = CATEGORIES.find(c=>catTags.includes(c.slug))?.slug || "errands";
+      // Use whatever category slug was actually published, custom or not — don't restrict to the
+      // known CATEGORIES list. Restricting here used to silently reclassify any custom category as
+      // "errands" the moment its own event round-tripped back from a relay (including back to its
+      // own poster), which would have broken "+ Add new category…" the instant it existed.
+      const category = catTags[0] || "errands";
       const lnaddr = tagVal(tags,"zap") || tagVal(tags,"lud16") || "";
       const latTag = tagVal(tags,"lat"), lonTag = tagVal(tags,"lon");
       const dtag = tagVal(tags,"d") || evt.id;
       const status = tagVal(tags,"status") || "active";
       const acceptedPubkey = tagVal(tags,"accepted") || null;
+      const dueTag = tags.find(t=>t[0]==="due");
+      const dueDate = dueTag ? dueTag[1] : null;
+      const dueMode = dueTag ? (dueTag[2] || "on") : null;
       const media = tags.filter(t=>t[0]==="imeta").map(t=>{
         const fields = {};
         t.slice(1).forEach(entry=>{
@@ -3321,7 +3514,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         // a republished/closed listing gets a new evt.id but the same d-tag, so the id used here
         // must be pubkey+d-tag or a "closed" replacement looks like a brand-new listing
         id: evt.pubkey + ":" + dtag, dtag, status, acceptedPubkey, created_at: evt.created_at,
-        title, category, location, price, media,
+        title, category, location, price, media, dueDate, dueMode,
         methods: methods.length ? methods : (lnaddr ? ["lightning"] : ["cash"]),
         desc: evt.content || "", lnaddr, demo:false, pubkey: evt.pubkey,
         lat: latTag ? parseFloat(latTag) : null,
@@ -3520,6 +3713,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
   // ---------- init ----------
   populateCategorySelect();
+  document.getElementById("f-due-date").min = todayISODate();
   renderFilters();
   renderGrid();
   const restoredSession = loadSession();
