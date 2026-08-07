@@ -2738,7 +2738,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       const listing = listings.find(l=>l.id===m.listingId);
       const npub = nip19.npubEncode(m.from);
       return `
-        <div class="inbox-item${m.read ? "" : " unread"}">
+        <div class="inbox-item${m.read ? "" : " unread"}" style="cursor:pointer;" data-msg-id="${m.id}">
           <div class="inbox-meta">
             <span>${shortNpub(npub)}${listing ? " · " + escapeHtml(listing.title) : ""}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
             <span>${formatRelativeTime(m.created_at)}</span>
@@ -2747,6 +2747,26 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         </div>
       `;
     }).join("");
+    // each inbox message is either an application on a listing I posted, or a reply to a listing I
+    // applied to (see handleIncomingDM — inboxMessages holds every kind-4 DM addressed to me,
+    // regardless of which side of the conversation I'm on) — mirrors openListingDetail's own
+    // poster-vs-applicant precedence, but works from the message's listingId since inbox messages
+    // (unlike a board card) have no listing object of their own to start from
+    list.querySelectorAll("[data-msg-id]").forEach(row=>{
+      const m = inboxMessages.find(msg=>msg.id===row.dataset.msgId);
+      if(!m) return;
+      const myListing = listings.find(l=>l.id===m.listingId && l.pubkey===currentUser.pubkey);
+      const myApplication = myApplications.find(a=>a.listingId===m.listingId);
+      if(!myListing && !myApplication) return; // no local context to navigate to — leave inert
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      const activate = ()=>{
+        if(myListing) openJobDetail("posted", myListing);
+        else openJobDetail("applied", myApplication);
+      };
+      row.addEventListener("click", activate);
+      row.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); activate(); } });
+    });
   }
 
   // ---------- my jobs (posted + applied) ----------
