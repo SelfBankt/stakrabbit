@@ -2544,6 +2544,16 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     if(!currentUser || evt.pubkey === currentUser.pubkey) return;
     if(inboxMessages.find(m=>m.id===evt.id)) return;
 
+    // sendInboxSubscription() can only filter by kind:4 + #p at the relay — Nostr has no way to
+    // scope that to "DMs about a stakrabbit listing" server-side, so this fires for every DM
+    // anyone sends this pubkey from any client, not just applications/replies. listingId comes
+    // from the ["a", "30402:"+id] tag sendEncryptedDM() attaches alongside ["p", toPubkey] — a
+    // public tag, not inside the encrypted content — so a DM with no such tag can be dropped here
+    // without ever decrypting it: never shown, never stored, no wasted decrypt call for a message
+    // that was never stakrabbit's to display in the first place.
+    const listingId = listingIdFromATag(evt.tags || []);
+    if(!listingId) return;
+
     try{
       let plaintext;
       if(currentUser.method === "nip07"){
@@ -2564,7 +2574,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         from: evt.pubkey,
         content: plaintext,
         created_at: evt.created_at,
-        listingId: listingIdFromATag(evt.tags || []),
+        listingId,
         offerGbp,
         read: false
       });
