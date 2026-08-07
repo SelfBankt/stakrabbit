@@ -990,6 +990,37 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   let feedPageCounter = 0;
   let inboxMessages = []; // decrypted DMs to currentUser: { id, from, content, created_at, listingId }
   const listingLastSeenAt = {}; // listing id -> latest created_at processed, for out-of-order relay delivery
+  // ---------- moderation (see CLAUDE.md "Moderation") ----------
+  // Client-side-only takedown list, fetched once from moderation.json at startup. Deliberately not
+  // a real deletion mechanism — the underlying event is untouched on the relays, so a blocked
+  // listing is still visible via any other Nostr client or a raw relay query. It's the smallest
+  // possible stopgap: no admin account, no backend, no new trust model — just a static file whose
+  // git history is the audit trail. isModerated() is checked in exactly one place (the kind:30402
+  // branch of connectRelay()'s message handler) so a blocked listing/pubkey never enters `listings`
+  // at all, rather than being filtered back out at render time in N different places.
+  let moderatedListingIds = new Set();
+  let moderatedPubkeys = new Set();
+
+  async function loadModerationList(){
+    try{
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 3000);
+      const res = await fetch("/moderation.json", { signal: controller.signal });
+      clearTimeout(timeout);
+      if(!res.ok) throw new Error(`moderation.json fetch failed: ${res.status}`);
+      const data = await res.json();
+      moderatedListingIds = new Set(Array.isArray(data.listingIds) ? data.listingIds : []);
+      moderatedPubkeys = new Set(Array.isArray(data.pubkeys) ? data.pubkeys : []);
+    }catch(e){
+      // fail open — a missing/slow moderation list shouldn't block the board from loading, same
+      // posture as every other non-critical fetch in this app (IP geolocation, FX rates, etc.)
+      console.error("Failed to load moderation list, showing all listings:", e);
+    }
+  }
+
+  function isModerated(listing){
+    return moderatedListingIds.has(listing.id) || moderatedPubkeys.has(listing.pubkey);
+  }
   const pendingCloseConfirms = new Set(); // listing ids in "confirm close?" state — kept out of the DOM
   // so a grid re-render triggered by an unrelated incoming relay event (which rebuilds every card)
   // doesn't silently drop the confirmation the user is mid-click on
@@ -2448,7 +2479,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
           const evt = data[2];
           if(evt.kind === 30402){
             const listing = eventToListing(evt);
-            if(listing){
+            if(listing && !isModerated(listing)){
               // kind:30402 is addressable — relays may deliver an older and newer version of the
               // same (pubkey, d-tag) listing in either order, so track the latest created_at we've
               // seen per id independent of whether that listing is currently in `listings` (an
@@ -3492,7 +3523,11 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     }
   }
   updateAuthUI();
-  connectRelays();
+  // .finally() rather than awaiting inside an async IIFE — a slow/failed moderation.json fetch
+  // (already capped at 3s and fails open, see loadModerationList()) shouldn't delay relay
+  // connections beyond that, and nothing before this line depends on the moderation list being
+  // ready yet
+  loadModerationList().finally(connectRelays);
   detectCurrencyFromIP();
 })();
 </script>
