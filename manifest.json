@@ -1,7 +1,7 @@
 {
   "name": "stakrabbit — Free Gig Market",
   "short_name": "stakrabbit",
-  "description": "Decentralized local classifieds for casual jobs — lawnmowing, dog walking, cleaning, moving help, and more, built on Nostr.",
+  "description": "Decentralized local classifieds for casual jobs and handyman work — lawnmowing, dog walking, cleaning, removals, furniture assembly, bar shifts, car washing, errands, and more, built on Nostr.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
