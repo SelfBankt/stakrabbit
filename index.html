@@ -578,6 +578,17 @@
     font-family:'Spline Sans Mono', monospace; margin-bottom:8px;
   }
   .inbox-item .inbox-body{ font-size:13.5px; line-height:1.5; white-space:pre-wrap; }
+  .profile-chip{
+    display:inline-flex; align-items:center; gap:6px; vertical-align:middle;
+  }
+  .profile-avatar{
+    border-radius:50%; object-fit:cover; flex:none;
+    background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.18);
+  }
+  .profile-name{ font-family:'Spline Sans Mono', monospace; }
+  .profile-nip05{
+    font-family:'Spline Sans Mono', monospace; font-size:0.85em; opacity:0.65;
+  }
   .account-chip{
     display:flex; align-items:center; gap:8px;
     background:rgba(255,255,255,0.12);
@@ -1159,6 +1170,114 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
   // ratingEvents, so no local persistence needed either. { id, from, vouchedPubkey, created_at }
   let vouchEvents = [];
 
+  // ---------- profiles (NIP-01 kind:0 metadata) ----------
+  const profileCache = {};        // pubkey -> { name, displayName, picture, nip05, created_at }
+  const profileRequested = new Set(); // pubkeys ever queued for a fetch, so we never re-REQ one
+  let profileFetchQueued = false;     // debounce flag — batches same-tick requestProfile() calls into one REQ
+  const PROFILE_SUB_ID = "satrabbit-profiles";
+  let currentJobDetail = null; // { mode, item } for the currently-open job-detail drawer, so a late-arriving profile can re-render it
+
+  // Unescaped — safe to drop into textContent, or to feed through escapeHtml yourself for innerHTML.
+  function profileNameRaw(pubkey){
+    if(!pubkey) return "";
+    const profile = profileCache[pubkey];
+    const label = profile && (profile.displayName || profile.name);
+    return label || shortNpub(nip19.npubEncode(pubkey));
+  }
+
+  function profileName(pubkey){
+    return escapeHtml(profileNameRaw(pubkey));
+  }
+
+  function profilePictureUrl(pubkey){
+    const profile = profileCache[pubkey];
+    if(!profile || !profile.picture) return null;
+    const pic = String(profile.picture).trim();
+    return /^(https?:\/\/|data:image\/)\S+$/i.test(pic) ? pic : null;
+  }
+
+  // Unescaped, and null (not "") when absent, so callers can tell "no nip05" apart from "empty
+  // string" — displayed as-is, not resolved against the claimed domain's /.well-known/nostr.json,
+  // so this is the poster's claimed handle, not a verified one (same caveat as "picture" above:
+  // sanity-checked as a plausible handle shape, not verified).
+  function profileNip05Raw(pubkey){
+    const profile = profileCache[pubkey];
+    if(!profile || !profile.nip05) return null;
+    const nip05 = String(profile.nip05).trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nip05) ? nip05 : null;
+  }
+
+  function profileNip05(pubkey){
+    const raw = profileNip05Raw(pubkey);
+    return raw ? escapeHtml(raw) : null;
+  }
+
+  // Shared "who is this" chip — avatar + display name + nip05 handle, each shown only when the
+  // poster's kind:0 actually set it, falling back to a shortened npub for the name when nothing
+  // else is available (no kind:0 yet, or one that never set name/display_name).
+  function renderProfileChip(pubkey, opts = {}){
+    if(!pubkey) return "";
+    requestProfile(pubkey);
+    const size = opts.size || 22;
+    const picture = profilePictureUrl(pubkey);
+    const name = profileName(pubkey);
+    const nip05 = profileNip05(pubkey);
+    const avatar = picture
+      ? `<img class="profile-avatar" src="${escapeHtml(picture)}" alt="" width="${size}" height="${size}" style="width:${size}px; height:${size}px;">`
+      : "";
+    const nip05Html = nip05 ? `<span class="profile-nip05">${nip05}</span>` : "";
+    return `<span class="profile-chip">${avatar}<span class="profile-name">${name}</span>${nip05Html}</span>`;
+  }
+
+  function requestProfile(pubkey){
+    if(!pubkey || profileCache[pubkey] || profileRequested.has(pubkey)) return;
+    profileRequested.add(pubkey);
+    // batch every requestProfile() call made in this tick (a single render pass can ask for a
+    // dozen pubkeys) into one REQ instead of firing a subscription per pubkey
+    if(profileFetchQueued) return;
+    profileFetchQueued = true;
+    setTimeout(()=>{ profileFetchQueued = false; sendProfileSubscription(); }, 0);
+  }
+
+  // Re-sends the accumulated author list under one fixed subscription id — per NIP-01 a REQ
+  // reusing an existing id replaces the relay's filter for it, so this naturally grows to cover
+  // every pubkey requested so far without needing a subscription per pubkey.
+  function sendProfileSubscription(){
+    if(profileRequested.size === 0) return;
+    const openSockets = sockets.filter(ws => ws.readyState === WebSocket.OPEN);
+    if(openSockets.length === 0) return;
+    const filter = { kinds:[0], authors:[...profileRequested] };
+    const sub = ["REQ", PROFILE_SUB_ID, filter];
+    openSockets.forEach(ws => ws.send(JSON.stringify(sub)));
+  }
+
+  function handleIncomingMetadata(evt){
+    if(!evt || !evt.pubkey || evt.kind !== 0) return;
+    const existing = profileCache[evt.pubkey];
+    if(existing && existing.created_at != null && evt.created_at != null && evt.created_at <= existing.created_at) return;
+    let parsed = {};
+    try{ parsed = JSON.parse(evt.content || "{}"); }catch(e){ parsed = {}; }
+    profileCache[evt.pubkey] = {
+      name: parsed.name || null,
+      displayName: parsed.display_name || null,
+      picture: parsed.picture || null,
+      nip05: parsed.nip05 || null,
+      created_at: evt.created_at || null
+    };
+    updateAuthUI();
+    renderGrid();
+    if(inboxDrawer.classList.contains("show")) renderInbox();
+    if(myJobsDrawer.classList.contains("show")) renderMyJobs();
+    if(jobDetailDrawer.classList.contains("show") && currentJobDetail) renderCurrentJobDetail();
+  }
+
+  function renderCurrentJobDetail(){
+    if(!currentJobDetail) return;
+    if(currentJobDetail.mode === "posted") renderJobDetailPostedView(currentJobDetail.item);
+    else if(currentJobDetail.mode === "applied") renderJobDetailAppliedView(currentJobDetail.item);
+    else renderJobDetailBrowseView(currentJobDetail.item);
+  }
+
   // ---------- proximity state ----------
   let refCoords = null;     // { lat, lon } — the point we're measuring distance from
   let refLabel = "";        // human label for status line
@@ -1587,7 +1706,9 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       return;
     }
     const notice = document.getElementById("signer-notice");
-    notice.textContent = `Posting as ${shortNpub(currentUser.npub)}.`;
+    requestProfile(currentUser.pubkey);
+    const nip05Suffix = profileNip05Raw(currentUser.pubkey) ? ` (${profileNip05Raw(currentUser.pubkey)})` : "";
+    notice.textContent = `Posting as ${profileNameRaw(currentUser.pubkey)}${nip05Suffix}.`;
     notice.classList.add("good");
     openDrawer(postDrawer);
   });
@@ -1912,7 +2033,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
       const chip = document.createElement("div");
       chip.className = "account-chip";
-      chip.innerHTML = `👤 ${shortNpub(currentUser.npub)} <button type="button" class="logout-x" id="logout-btn">Log out</button>`;
+      chip.innerHTML = `${renderProfileChip(currentUser.pubkey, { size:20 })} <button type="button" class="logout-x" id="logout-btn">Log out</button>`;
       area.appendChild(chip);
       document.getElementById("logout-btn").addEventListener("click", (e)=>{
         e.stopPropagation();
@@ -1921,7 +2042,8 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     } else if(lockedAccount){
       const btn = document.createElement("button");
       btn.className = "account-chip";
-      btn.textContent = `🔒 ${shortNpub(lockedAccount.npub)} · Unlock`;
+      requestProfile(lockedAccount.pubkey);
+      btn.textContent = `🔒 ${profileNameRaw(lockedAccount.pubkey)} · Unlock`;
       btn.addEventListener("click", openUnlockPrompt);
       area.appendChild(btn);
     } else {
@@ -2654,6 +2776,11 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
       sendInboxSubscription(ws);
       const labelsSub = ["REQ", "satrabbit-labels", { kinds:[1985], "#L":[RATING_NAMESPACE, VOUCH_NAMESPACE], limit:500 }];
       ws.send(JSON.stringify(labelsSub));
+      // re-send the accumulated profile-fetch list to this relay too — a relay that (re)connects
+      // later would otherwise never see pubkeys that were already requested before it came up
+      if(profileRequested.size > 0){
+        ws.send(JSON.stringify(["REQ", PROFILE_SUB_ID, { kinds:[0], authors:[...profileRequested] }]));
+      }
     });
 
     ws.addEventListener("message", (msg)=>{
@@ -2698,6 +2825,8 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
             const namespace = tagVal(evt.tags || [], "L");
             if(namespace === RATING_NAMESPACE) handleIncomingRating(evt);
             else if(namespace === VOUCH_NAMESPACE) handleIncomingVouch(evt);
+          } else if(evt.kind === 0){
+            handleIncomingMetadata(evt);
           }
         } else if(data[0] === "OK" && data[1]){
           handlePublishAck(data[1], !!data[2]);
@@ -2961,11 +3090,10 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     }
     list.innerHTML = inboxMessages.map(m=>{
       const listing = listings.find(l=>l.id===m.listingId);
-      const npub = nip19.npubEncode(m.from);
       return `
         <div class="inbox-item${m.read ? "" : " unread"}" style="cursor:pointer;" data-msg-id="${m.id}">
           <div class="inbox-meta">
-            <span>${shortNpub(npub)}${listing ? " · " + escapeHtml(listing.title) : ""}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${renderProfileChip(m.from, { size:20 })}${listing ? " · " + escapeHtml(listing.title) : ""}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
             <span>${formatRelativeTime(m.created_at)}</span>
           </div>
           <div class="inbox-body">${escapeHtml(m.content)}</div>
@@ -3068,6 +3196,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
 
   // ---------- job detail (view/edit posted, thread for applied) ----------
   function openJobDetail(mode, item){
+    currentJobDetail = { mode, item };
     if(mode === "posted") renderJobDetailPostedView(item);
     else if(mode === "applied") renderJobDetailAppliedView(item);
     else renderJobDetailBrowseView(item);
@@ -3142,7 +3271,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
         return `
         <div class="inbox-item${m.read ? "" : " unread"}">
           <div class="inbox-meta">
-            <span>${shortNpub(nip19.npubEncode(m.from))} ${renderReputationBadge(m.from)}${renderTierBadge(m.from)}${acceptedBadge}${expiredBadge}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+            <span>${renderProfileChip(m.from, { size:20 })} ${renderReputationBadge(m.from)}${renderTierBadge(m.from)}${acceptedBadge}${expiredBadge}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
             <span>${offerBadge} ${formatRelativeTime(m.created_at)}</span>
           </div>
           <div class="inbox-body">${escapeHtml(m.content)}</div>
@@ -3430,7 +3559,7 @@ import QRCode from "https://esm.sh/qrcode@1.5.3";
     document.getElementById("jd-thread").innerHTML = thread.map(m=>`
       <div class="inbox-item${m.read ? "" : " unread"}">
         <div class="inbox-meta">
-          <span>${m.from==="you" ? "You" : shortNpub(nip19.npubEncode(app.posterPubkey))}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
+          <span>${m.from==="you" ? "You" : renderProfileChip(app.posterPubkey, { size:20 })}${m.read ? "" : '<span class="unread-dot"></span>'}</span>
           <span>${formatRelativeTime(m.at)}</span>
         </div>
         <div class="inbox-body">${escapeHtml(m.content)}</div>
